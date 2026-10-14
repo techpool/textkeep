@@ -365,8 +365,10 @@ export async function buildApp(c: Config, db: pg.Pool) {
   app.get("/app/access/interaction", async (req, reply) => {
     await owner(req);
     const d = await oa.provider.interactionDetails(req.raw, reply.raw);
+    const client = await oa.provider.Client.find(String(d.params.client_id));
     return {
-      client: d.params.client_id,
+      client: client?.clientName || d.params.client_id,
+      clientId: d.params.client_id,
       prompt: d.prompt.name,
       requestedScopes: d.params.scope,
       resource: d.params.resource,

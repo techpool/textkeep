@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import pg from "pg";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes, createHash } from "node:crypto";
+import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
 import { generateKeyPair, exportJWK } from "jose";
 import { buildApp } from "./app.js";
 import { migrate } from "./database.js";
@@ -12,7 +13,7 @@ const url = process.env.TEST_DATABASE_URL;
 test(
   "HTTP health, auth denial, CSRF origin, OAuth registration/PKCE and actual Streamable HTTP client",
   { skip: !url },
-  async () => {
+  async (t) => {
     assert.match(url!, /localhost|127\.0\.0\.1/);
     const db = new pg.Pool({ connectionString: url });
     await migrate(db);
@@ -177,6 +178,181 @@ test(
       });
       assert.match(JSON.stringify(status), /freshness/);
       await client.close();
+      // Only the Google identity boundary is stubbed in this local fixture.
+      // Exercise the actual HTTP interaction, PKCE, adapter and token lifecycle.
+      const googleUid = "http-google-fixture";
+      t.mock.method(
+        getAuth(),
+        "verifySessionCookie",
+        async () =>
+          ({
+            uid: googleUid,
+            email: "owner@example.test",
+            email_verified: true,
+            auth_time: Math.floor(Date.now() / 1000),
+            firebase: { sign_in_provider: "google.com" },
+          }) as DecodedIdToken,
+      );
+      const jar = new Map<
+        string,
+        { name: string; value: string; path: string }
+      >();
+      jar.set("session:/", {
+        name: "session",
+        value: "synthetic-web-session",
+        path: "/",
+      });
+      const browserFetch = async (path: string, options: RequestInit = {}) => {
+        const target = new URL(path, origin);
+        assert.equal(target.origin, origin);
+        const cookie = [...jar.values()]
+          .filter((c) => target.pathname.startsWith(c.path))
+          .map((c) => c.name + "=" + c.value)
+          .join("; ");
+        const r = await fetch(target, {
+          ...options,
+          redirect: "manual",
+          headers: { ...options.headers, Cookie: cookie },
+        });
+        for (const value of r.headers.getSetCookie()) {
+          const [pair, ...attributes] = value.split(";");
+          const at = pair!.indexOf("=");
+          const name = pair!.slice(0, at),
+            content = pair!.slice(at + 1);
+          const path =
+            attributes
+              .find((a) => a.trim().toLowerCase().startsWith("path="))
+              ?.trim()
+              .slice(5) || "/";
+          const key = name + ":" + path;
+          if (!content || attributes.some((a) => /max-age=0/i.test(a)))
+            jar.delete(key);
+          else jar.set(key, { name, value: content, path });
+        }
+        return r;
+      };
+      const fixtureCsrf = (await (
+        await browserFetch("/api/v1/auth/csrf")
+      ).json()) as {
+        token: string;
+      };
+      const verifier = randomBytes(48).toString("base64url");
+      const state = randomUUID();
+      const grantParams = new URLSearchParams({
+        ...Object.fromEntries(params),
+        resource: origin + "/mcp",
+        scope: "openid offline_access messages:read",
+        state,
+        prompt: "consent",
+        code_challenge: createHash("sha256")
+          .update(verifier)
+          .digest("base64url"),
+        code_challenge_method: "S256",
+      });
+      let response = await browserFetch(
+        metadata.authorization_endpoint + "?" + grantParams,
+      );
+      const interactionTrace: string[] = [];
+      let callback: URL | undefined;
+      for (let step = 0; step < 8; step++) {
+        const destination = response.headers.get("location");
+        assert.ok(destination, "OAuth response must redirect");
+        if (destination.startsWith("http://127.0.0.1:51230/callback")) {
+          callback = new URL(destination);
+          break;
+        }
+        const next = new URL(destination, origin);
+        interactionTrace.push(next.pathname);
+        if (next.pathname === "/app/access") {
+          const interaction = await browserFetch("/app/access/interaction");
+          assert.equal(interaction.status, 200);
+          const observedPrompt = ((await interaction.json()) as any).prompt;
+          interactionTrace.push(observedPrompt);
+          assert.ok(["login", "consent"].includes(observedPrompt));
+          response = await browserFetch("/app/access/consent", {
+            method: "POST",
+            headers: {
+              Origin: origin,
+              "Content-Type": "application/json",
+              "X-CSRF-Token": fixtureCsrf.token,
+            },
+            body: JSON.stringify({ approve: true, sensitive: false }),
+          });
+        } else response = await browserFetch(next.href);
+      }
+      assert.ok(callback, JSON.stringify(interactionTrace));
+      assert.equal(callback?.searchParams.get("state"), state);
+      assert.ok(callback?.searchParams.get("code"));
+      const exchange = async (fields: Record<string, string>) => {
+        const r = await fetch(metadata.token_endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: clientMeta.client_id,
+            resource: origin + "/mcp",
+            ...fields,
+          }),
+        });
+        return { status: r.status, ...((await r.json()) as any) };
+      };
+      const issued = await exchange({
+        grant_type: "authorization_code",
+        code: callback!.searchParams.get("code")!,
+        redirect_uri: "http://127.0.0.1:51230/callback",
+        code_verifier: verifier,
+      });
+      assert.equal(issued.status, 200);
+      assert.ok(issued.refresh_token);
+      const authorized = new Client({ name: "oauth-http-test", version: "1" });
+      await authorized.connect(
+        new StreamableHTTPClientTransport(new URL(origin + "/mcp"), {
+          requestInit: {
+            headers: { Authorization: "Bearer " + issued.access_token },
+          },
+        }),
+      );
+      assert.equal((await authorized.listTools()).tools.length, 5);
+      assert.match(
+        JSON.stringify(
+          await authorized.callTool({ name: "get_sync_status", arguments: {} }),
+        ),
+        /freshness/,
+      );
+      await authorized.close();
+      const rotated = await exchange({
+        grant_type: "refresh_token",
+        refresh_token: issued.refresh_token,
+      });
+      assert.equal(rotated.status, 200);
+      assert.notEqual(rotated.refresh_token, issued.refresh_token);
+      assert.equal(
+        (
+          await exchange({
+            grant_type: "refresh_token",
+            refresh_token: issued.refresh_token,
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await exchange({
+            grant_type: "refresh_token",
+            refresh_token: rotated.refresh_token,
+          })
+        ).status,
+        400,
+      );
+      const revoked = await fetch(origin + "/mcp", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + rotated.access_token,
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      });
+      assert.equal(revoked.status, 401);
+      await db.query("DELETE FROM textkeep.users WHERE uid=$1", [googleUid]);
     } finally {
       await app.close();
     }

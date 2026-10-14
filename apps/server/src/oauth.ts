@@ -99,7 +99,8 @@ export function oauth(c: Config, db: pg.Pool, vault: Vault) {
       long: { signed: true, secure: c.production, sameSite: "lax" },
       short: { signed: true, secure: c.production, sameSite: "lax" },
     },
-    scopes: ["openid", "offline_access", "messages:read", "messages:sensitive"],
+    // API permissions belong to the MCP resource, not OIDC identity claims.
+    scopes: ["openid", "offline_access"],
     responseTypes: ["code"],
     pkce: { required: () => true },
     rotateRefreshToken: () => true,

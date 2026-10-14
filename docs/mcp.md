@@ -24,3 +24,5 @@ For a local desktop client, create a short-lived personal token in access settin
 ```
 
 The adapter calls the same remote MCP endpoint and exposes the five read-only tools over stdio. It is a separate local-token integration; it does not imply universal remote OAuth compatibility. Returned messages may leave your server through the authorized client's provider.
+
+Verification includes a local HTTP authorization/consent flow with only the Google identity boundary stubbed, actual PKCE exchange, a remote SDK client, rotating refresh tokens, reuse-triggered grant revocation and rejected access afterward. Live Google-owner OAuth consent and client-provider compatibility remain separate deployment gates.
