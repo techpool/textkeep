@@ -1,24 +1,24 @@
 services:
   app:
     build:
-      context: ..
+      context: .
       dockerfile: deployment/Dockerfile
     restart: unless-stopped
     expose: ["3000"]
     environment:
       APP_ENV: production
       PORT: 3000
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Configure HTTPS origin}
-      DATABASE_URL: ${DATABASE_URL:?Use the existing private PostgreSQL instance}
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?Configure authentication project}
-      FIREBASE_WEB_CONFIG: ${FIREBASE_WEB_CONFIG:?Supply public Firebase configuration}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_WEB_CONFIG: ${FIREBASE_WEB_CONFIG}
       GOOGLE_APPLICATION_CREDENTIALS: /run/textkeep/firebase-admin.json
-      ALLOWED_GOOGLE_EMAILS: ${ALLOWED_GOOGLE_EMAILS:?Explicit authorized accounts required}
+      ALLOWED_GOOGLE_EMAILS: ${ALLOWED_GOOGLE_EMAILS}
       OWNER_FIREBASE_UID: ${OWNER_FIREBASE_UID:-}
-      MESSAGE_ENCRYPTION_KEYRING: ${MESSAGE_ENCRYPTION_KEYRING:?Supply encryption keyring}
+      MESSAGE_ENCRYPTION_KEYRING: ${MESSAGE_ENCRYPTION_KEYRING}
       ACTIVE_MESSAGE_KEY_ID: ${ACTIVE_MESSAGE_KEY_ID:-v1}
-      LOOKUP_HMAC_KEY: ${LOOKUP_HMAC_KEY:?Supply lookup key}
-      OAUTH_JWKS: ${OAUTH_JWKS:?Supply private OAuth signing keys}
+      LOOKUP_HMAC_KEY: ${LOOKUP_HMAC_KEY}
+      OAUTH_JWKS: ${OAUTH_JWKS}
       APK_PATH: /run/textkeep/textkeep.apk
       RELEASE_METADATA_PATH: /run/textkeep/release.json
     volumes:
@@ -36,4 +36,4 @@ services:
 networks:
   database:
     external: true
-    name: ${DATABASE_NETWORK:?Existing database network required}
+    name: ${DATABASE_NETWORK}

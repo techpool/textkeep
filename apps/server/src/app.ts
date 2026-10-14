@@ -438,7 +438,7 @@ export async function buildApp(c: Config, db: pg.Pool) {
     return reply.code(405).send({ error: "Use Streamable HTTP POST" });
   });
   app.get("/downloads/textkeep.apk", async (req, reply) => {
-    if (!c.apkPath || !existsSync(c.apkPath))
+    if (!c.releaseMetadata || !c.apkPath || !existsSync(c.apkPath))
       return reply.code(404).send({ error: "Release not available" });
     reply
       .header("Content-Type", "application/vnd.android.package-archive")

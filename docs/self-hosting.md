@@ -27,3 +27,5 @@ Use RunnerMesh for trusted Android pushes: create a dedicated project, bind only
 There is no additional backup/restore system. Database or key loss can lose server copies. Preserve your existing infrastructure policies.
 
 Coolify validates bind mounts before expanding variables. The production Compose file uses `/data/textkeep/private` as its conventional private runtime directory. Create that directory on the deployment host with access limited to the application UID (1000), or edit the bind path for your host before deployment.
+
+Run the production Compose file with `docker compose --project-directory . -f deployment/compose.production.yaml ...` from the repository root. Coolify uses that project directory automatically. Mark only `DATABASE_NETWORK` as available during build so Compose can resolve its external network; keep all authentication and encryption secrets runtime-only. Application startup validates required runtime values.

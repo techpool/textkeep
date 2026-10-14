@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { z } from "zod";
+import { existsSync, statSync, readFileSync } from "node:fs";
 export interface Config {
   production: boolean;
   origin: string;
@@ -50,6 +52,33 @@ export function config(env: NodeJS.ProcessEnv = process.env): Config {
   const lookupKey = required("LOOKUP_HMAC_KEY");
   if (Buffer.from(lookupKey, "base64").length < 32)
     throw Error("Lookup key must be at least 32 bytes");
+  let releaseMetadata: object | undefined;
+  if (
+    env.RELEASE_METADATA_PATH &&
+    existsSync(env.RELEASE_METADATA_PATH) &&
+    env.APK_PATH &&
+    existsSync(env.APK_PATH)
+  ) {
+    if (statSync(env.RELEASE_METADATA_PATH).size > 4096)
+      throw Error("Invalid release metadata");
+    const release = z
+      .object({
+        version: z.string().max(32),
+        versionCode: z.number().int().positive(),
+        sha256: z.string().regex(/^[a-f0-9]{64}$/),
+        certificateSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        size: z.number().int().positive().max(200000000),
+        experimental: z.literal(true),
+      })
+      .parse(JSON.parse(readFileSync(env.RELEASE_METADATA_PATH, "utf8")));
+    if (
+      statSync(env.APK_PATH).size !== release.size ||
+      createHash("sha256").update(readFileSync(env.APK_PATH)).digest("hex") !==
+        release.sha256
+    )
+      throw Error("APK release checksum mismatch");
+    releaseMetadata = release;
+  }
   return {
     production,
     origin,
@@ -64,8 +93,6 @@ export function config(env: NodeJS.ProcessEnv = process.env): Config {
     oauthJwks: JSON.parse(required("OAUTH_JWKS")),
     port: Number(env.PORT || 3000),
     apkPath: env.APK_PATH,
-    releaseMetadata: env.RELEASE_METADATA_PATH
-      ? JSON.parse(readFileSync(env.RELEASE_METADATA_PATH, "utf8"))
-      : undefined,
+    releaseMetadata,
   };
 }
