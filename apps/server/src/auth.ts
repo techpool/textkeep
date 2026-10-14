@@ -57,7 +57,9 @@ export class Auth {
       kind: "firebase",
     };
   }
-  async identity(req: FastifyRequest): Promise<Identity> {
+  async identity(
+    req: Pick<FastifyRequest, "headers" | "cookies">,
+  ): Promise<Identity> {
     const header = req.headers.authorization;
     if (header?.startsWith("Bearer tk_")) {
       const r = await this.db.query(
@@ -87,6 +89,11 @@ export class Auth {
     const session = req.cookies?.session;
     if (session) {
       try {
+        const revoked = await this.db.query(
+          "SELECT 1 FROM textkeep.revoked_web_sessions WHERE hash=$1 AND expires_at>now()",
+          [secretHash(session)],
+        );
+        if (revoked.rowCount) throw new HttpError(401, "Sign in again");
         const identity = await this.bind(
           await this.firebase.verifySessionCookie(session, true),
         );
@@ -98,6 +105,18 @@ export class Auth {
       }
     }
     throw new HttpError(401, "Authentication required");
+  }
+  async revokeSession(session?: string) {
+    if (!session) return;
+    // A web cookie lives for one hour. Preserve phone refresh credentials and
+    // independently consented MCP grants when this browser signs out.
+    await this.db.query(
+      "INSERT INTO textkeep.revoked_web_sessions(hash,expires_at) VALUES($1,now()+interval '1 hour') ON CONFLICT(hash) DO NOTHING",
+      [secretHash(session)],
+    );
+    await this.db.query(
+      "DELETE FROM textkeep.revoked_web_sessions WHERE expires_at<=now()",
+    );
   }
   recent(i: Identity) {
     if (

@@ -4,7 +4,7 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName="receipts",indices=[Index("providerId")]) data class Receipt(@PrimaryKey val id:String,val encrypted:String,val kind:String="sms",val providerId:Long=0,val notified:Boolean=false,val receivedAt:Long=System.currentTimeMillis())
-@Entity(tableName="sources",primaryKeys=["epoch","providerId"]) data class Source(val epoch:String,val providerId:Long,val digest:String,val revision:Long,val encrypted:String,val uploadedRevision:Long=0,val error:String?=null,val binding:String="")
+@Entity(tableName="sources",primaryKeys=["epoch","providerId"],indices=[Index(value=["binding","error","providerId"])]) data class Source(val epoch:String,val providerId:Long,val digest:String,val revision:Long,val encrypted:String,val uploadedRevision:Long=0,val error:String?=null,val binding:String="")
 @Entity(tableName="state") data class State(@PrimaryKey val key:String,val value:String)
 @Dao interface LocalDao {
  @Insert(onConflict=OnConflictStrategy.IGNORE) suspend fun receipt(r:Receipt):Long
@@ -25,9 +25,9 @@ import kotlinx.coroutines.flow.Flow
  @Query("DELETE FROM sources") suspend fun clearSources()
  @Query("DELETE FROM state WHERE `key` IN ('deviceId','deviceToken','accountBinding','scanCursor')") suspend fun resetCloud()
 }
-@Database(entities=[Receipt::class,Source::class,State::class],version=1,exportSchema=false) abstract class LocalStore:RoomDatabase() {
+@Database(entities=[Receipt::class,Source::class,State::class],version=2,exportSchema=false) abstract class LocalStore:RoomDatabase() {
  abstract fun dao():LocalDao
  companion object { @Volatile private var instance:LocalStore?=null
-  fun get(c:Context)=instance?:synchronized(this){instance?:Room.databaseBuilder(c.applicationContext,LocalStore::class.java,"local.db").build().also{instance=it}}
+  fun get(c:Context)=instance?:synchronized(this){instance?:Room.databaseBuilder(c.applicationContext,LocalStore::class.java,"local.db").addMigrations(object:androidx.room.migration.Migration(1,2){override fun migrate(db:androidx.sqlite.db.SupportSQLiteDatabase){db.execSQL("CREATE INDEX IF NOT EXISTS index_sources_binding_error_providerId ON sources(binding,error,providerId)")}}).build().also{instance=it}}
  }
 }

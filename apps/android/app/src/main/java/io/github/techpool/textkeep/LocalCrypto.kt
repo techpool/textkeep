@@ -51,10 +51,10 @@ object LocalCrypto {
   val ciphertext=public.encrypt(value.toString().toByteArray(),id.toByteArray())
   val out=target.startWrite();try{out.write(JSONObject().put("version",1).put("ciphertext",b64(ciphertext)).toString().toByteArray());target.finishWrite(out)}catch(e:Exception){target.failWrite(out);throw e}
  }
- fun readJournal(c:Context):List<Pair<File,JSONObject>> {
+ fun readJournal(c:Context):Sequence<Pair<File,JSONObject>> {
   check(TelephonyCore.unlocked(c)){"Private receipt keyset is credential protected"};HybridConfig.register()
   val master=AndroidKeystoreKmsClient().getAead("android-keystore://payload-v1")
   val private=KeysetHandle.readWithAssociatedData(BinaryKeysetReader.withBytes(AtomicFile(File(c.noBackupFilesDir,"receipt-private-v1.keyset")).readFully()),master,privateContext).getPrimitive(HybridDecrypt::class.java)
-  return File(c.createDeviceProtectedStorageContext().filesDir,"receipts").listFiles()?.filter{it.extension=="json"}?.sortedBy{it.lastModified()}?.take(100)?.mapNotNull{f->runCatching{val envelope=JSONObject(AtomicFile(f).readFully().toString(Charsets.UTF_8));f to JSONObject(String(private.decrypt(un64(envelope.getString("ciphertext")),f.nameWithoutExtension.toByteArray())))}.getOrElse{android.util.Log.e("TextKeep","Receipt recovery failed; encrypted envelope retained");null}}?:emptyList()
+  return File(c.createDeviceProtectedStorageContext().filesDir,"receipts").listFiles()?.filter{it.extension=="json"}?.sortedBy{it.lastModified()}?.take(100)?.asSequence()?.mapNotNull{f->runCatching{val envelope=JSONObject(AtomicFile(f).readFully().toString(Charsets.UTF_8));f to JSONObject(String(private.decrypt(un64(envelope.getString("ciphertext")),f.nameWithoutExtension.toByteArray())))}.getOrElse{android.util.Log.e("TextKeep","Receipt recovery failed; encrypted envelope retained");null}}?:emptySequence()
  }
 }

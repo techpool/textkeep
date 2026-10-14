@@ -22,19 +22,22 @@ export async function migrate(db: pg.Pool) {
       "SELECT 1 FROM pg_namespace WHERE nspname='textkeep'",
     );
     if (!schema.rowCount) await client.query("CREATE SCHEMA textkeep");
-    const sql = await readFile(
-      fileURLToPath(
-        new URL(
-          "../../../database/migrations/001_initial.sql",
-          import.meta.url,
+    for (const [version, file] of [
+      ["001", "001_initial.sql"],
+      ["002", "002_web_sessions.sql"],
+    ]) {
+      const sql = await readFile(
+        fileURLToPath(
+          new URL(`../../../database/migrations/${file}`, import.meta.url),
         ),
-      ),
-      "utf8",
-    );
-    await client.query(sql);
-    await client.query(
-      "INSERT INTO textkeep.schema_migrations(version) VALUES('001') ON CONFLICT DO NOTHING",
-    );
+        "utf8",
+      );
+      await client.query(sql);
+      await client.query(
+        "INSERT INTO textkeep.schema_migrations(version) VALUES($1) ON CONFLICT DO NOTHING",
+        [version],
+      );
+    }
     await client.query("COMMIT");
   } catch (e) {
     await client.query("ROLLBACK");

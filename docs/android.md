@@ -15,3 +15,5 @@ Before first unlock, receipts use the public-key envelope journal and never acce
 Android backup and device-transfer rules exclude local private state. The app does not change separate system SMS backup settings. Reinstallation can change device/provider identity and requires deliberate reconciliation; duplicate risk is documented rather than silently merging across devices.
 
 MMS is part of local default-handler responsibilities. WAP notifications are persisted and downloaded with native carrier APIs; failures remain visible and retryable. Attachments remain local. Carrier receive/download/send/display tests are required before daily default-handler use.
+
+Receipt identities use the telephony service’s `messageId` when supplied. Older/OEM deliveries without that identifier receive independent journal IDs, so genuinely identical messages are not merged by sender/body/timestamp or PDU content. Recovery of a retained journal is idempotent; duplicate broadcasts lacking a stable system ID can remain duplicated. Verify that behavior on the intended carrier/OEM.

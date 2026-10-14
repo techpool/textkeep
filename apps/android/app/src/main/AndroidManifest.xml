@@ -18,6 +18,7 @@
   <activity android:name=".CopyCodeActivity" android:exported="false" android:excludeFromRecents="true"/>
   <receiver android:name=".SmsDeliveryReceiver" android:permission="android.permission.BROADCAST_SMS" android:exported="true" android:directBootAware="true"><intent-filter><action android:name="android.provider.Telephony.SMS_DELIVER"/></intent-filter></receiver>
   <receiver android:name=".MmsDeliveryReceiver" android:permission="android.permission.BROADCAST_WAP_PUSH" android:exported="true" android:directBootAware="true"><intent-filter><action android:name="android.provider.Telephony.WAP_PUSH_DELIVER"/><data android:mimeType="application/vnd.wap.mms-message"/></intent-filter></receiver>
+  <receiver android:name=".DefaultRoleChangedReceiver" android:permission="android.permission.BROADCAST_SMS" android:exported="true" android:directBootAware="true"><intent-filter><action android:name="android.provider.action.DEFAULT_SMS_PACKAGE_CHANGED"/></intent-filter></receiver>
   <receiver android:name=".SmsResultReceiver" android:exported="false"/>
   <receiver android:name=".MmsResultReceiver" android:exported="false"/>
   <receiver android:name=".UnlockReceiver" android:exported="false" android:directBootAware="true"><intent-filter><action android:name="android.intent.action.USER_UNLOCKED"/><action android:name="android.intent.action.MY_PACKAGE_REPLACED"/></intent-filter></receiver>

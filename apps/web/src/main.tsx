@@ -581,6 +581,9 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
     } | null>(null),
     [devices, setDevices] = useState<any[]>([]),
     [status, setStatus] = useState<any>(null),
+    [history, setHistory] = useState<any>(null),
+    [conversations, setConversations] = useState<any>(null),
+    [conversation, setConversation] = useState<any>(null),
     [access, setAccess] = useState<any>(null),
     [query, setQuery] = useState(""),
     [sender, setSender] = useState(""),
@@ -600,6 +603,9 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
     setData(null);
     setDevices([]);
     setStatus(null);
+    setHistory(null);
+    setConversations(null);
+    setConversation(null);
     setAccess(null);
     setDetail(null);
     setPurge(null);
@@ -636,6 +642,25 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
     if (section === "access") {
       setAccess(await api("/api/v1/access"));
       if (interactionId) setInteraction(await api("/app/access/interaction"));
+    } else if (section === "devices") {
+      setHistory(await api("/api/v1/sync/history"));
+    } else if (section === "conversations") {
+      const threads = await api("/api/v1/threads");
+      setConversations(threads);
+      const id = location.pathname.split("/")[3];
+      setConversation(
+        id
+          ? {
+              id,
+              address:
+                threads.threads.find((t: any) => t.id === id)?.address ||
+                "Conversation",
+              ...(await api(
+                `/api/v1/threads/${encodeURIComponent(id)}/messages`,
+              )),
+            }
+          : null,
+      );
     } else {
       await search();
       const messageId = location.pathname.split("/")[3];
@@ -663,7 +688,7 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
   };
   useEffect(() => {
     void run(load);
-  }, [section]);
+  }, [location.pathname, interactionId]);
   if (!user)
     return (
       <>
@@ -739,11 +764,22 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
           </Button>
         </Stack>
         <Tabs
-          value={section === "devices" ? 1 : section === "access" ? 2 : 0}
+          value={
+            section === "conversations"
+              ? 1
+              : section === "devices"
+                ? 2
+                : section === "access"
+                  ? 3
+                  : 0
+          }
+          variant="scrollable"
+          scrollButtons="auto"
           sx={{ mb: 3, borderBottom: "1px solid #dee7dd" }}
         >
           {[
             ["Messages", "/app"],
+            ["Conversations", "/app/conversations"],
             ["Devices & sync", "/app/devices"],
             ["Access & privacy", "/app/access"],
           ].map(([name, to]) => (
@@ -799,6 +835,137 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                 </CardContent>
               </Card>
             ))}
+            <Card>
+              <CardContent>
+                <Typography variant="h6">Upload history</Typography>
+                <Typography color="text.secondary" sx={{ mb: 2 }}>
+                  Recent batches accepted by this server. Pending phone work
+                  appears in the Android sync screen.
+                </Typography>
+                {history?.uploads.length === 0 && (
+                  <Typography>No uploads yet.</Typography>
+                )}
+                {history?.uploads.map((h: any, index: number) => (
+                  <Box
+                    key={index}
+                    sx={{ py: 1, borderTop: "1px solid #dee7dd" }}
+                  >
+                    <Typography>
+                      {h.name} · {h.processed} processed records
+                    </Typography>
+                    <Typography variant="caption">
+                      {time(new Date(h.created_at).getTime())}
+                    </Typography>
+                  </Box>
+                ))}
+                {history?.truncated && (
+                  <Alert severity="info">
+                    Showing the latest 100 upload batches.
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </Stack>
+        ) : section === "conversations" ? (
+          <Stack sx={{ gap: 2 }}>
+            {!conversation ? (
+              <>
+                <Typography color="text.secondary">
+                  Conversations are grouped by phone and inbox generation.
+                </Typography>
+                {conversations?.truncated && (
+                  <Alert severity="info">
+                    Showing up to 100 conversations. Use Messages to search the
+                    full archive.
+                  </Alert>
+                )}
+                {conversations?.threads.length === 0 && (
+                  <Typography>No synchronized conversations yet.</Typography>
+                )}
+                {conversations?.threads.map((thread: any) => (
+                  <Card key={thread.id}>
+                    <CardContent>
+                      <Typography variant="h6">{thread.address}</Typography>
+                      <Typography
+                        sx={{
+                          whiteSpace: "pre-wrap",
+                          overflowWrap: "anywhere",
+                          my: 1,
+                        }}
+                      >
+                        {thread.latest.body}
+                      </Typography>
+                      <Typography variant="caption">
+                        {time(thread.date)} ·{" "}
+                        {devices.find((d) => d.id === thread.latest.device)
+                          ?.name || "Phone"}
+                      </Typography>
+                      <Box sx={{ mt: 1 }}>
+                        <Button
+                          component={RouterLink}
+                          to={`/app/conversations/${encodeURIComponent(thread.id)}`}
+                        >
+                          Open conversation
+                        </Button>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))}
+              </>
+            ) : (
+              <>
+                <Button
+                  sx={{ alignSelf: "start" }}
+                  component={RouterLink}
+                  to="/app/conversations"
+                >
+                  Back to conversations
+                </Button>
+                <Typography variant="h5">{conversation.address}</Typography>
+                {conversation.messages.map((m: Message) => (
+                  <Card key={m.id}>
+                    <CardContent>
+                      <Typography variant="caption">
+                        {time(m.date)} · {boxes[m.type]}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          whiteSpace: "pre-wrap",
+                          overflowWrap: "anywhere",
+                          my: 2,
+                        }}
+                      >
+                        {m.body}
+                      </Typography>
+                      <Button onClick={() => setDetail(m)}>
+                        Message details
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+                {conversation.nextCursor && (
+                  <Button
+                    onClick={() =>
+                      void run(async () => {
+                        const next = await api(
+                          `/api/v1/threads/${encodeURIComponent(conversation.id)}/messages?cursor=${encodeURIComponent(conversation.nextCursor)}`,
+                        );
+                        setConversation({
+                          ...conversation,
+                          ...next,
+                          messages: [
+                            ...conversation.messages,
+                            ...next.messages,
+                          ],
+                        });
+                      })
+                    }
+                  >
+                    Load older messages
+                  </Button>
+                )}
+              </>
+            )}
           </Stack>
         ) : section === "access" ? (
           <Stack sx={{ gap: 3 }}>

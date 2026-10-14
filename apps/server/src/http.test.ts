@@ -54,6 +54,8 @@ test(
         "/api/v1/me",
         "/api/v1/messages",
         "/api/v1/devices",
+        "/api/v1/threads",
+        "/api/v1/sync/history",
       ]) {
         const r = await fetch(origin + path);
         assert.equal(r.status, 401, path);

@@ -95,7 +95,8 @@ export async function buildApp(c: Config, db: pg.Pool) {
     if (
       req.url.startsWith("/api/v1/") ||
       req.url.startsWith("/mcp") ||
-      req.url.startsWith("/oauth")
+      req.url.startsWith("/oauth") ||
+      req.url.startsWith("/app/access/")
     )
       reply.header("Cache-Control", "no-store");
     if (
@@ -164,12 +165,8 @@ export async function buildApp(c: Config, db: pg.Pool) {
     },
   );
   app.delete("/api/v1/auth/session", async (req, reply) => {
-    const i = await owner(req);
-    await auth.firebase.revokeRefreshTokens(i.uid);
-    await db.query(
-      "DELETE FROM textkeep.oauth_objects WHERE model IN ($1,$2) AND payload IS NULL",
-      ["Session", "Interaction"],
-    );
+    await owner(req);
+    await auth.revokeSession(req.cookies.session);
     reply.clearCookie("session", { path: "/" });
     return { ok: true };
   });
@@ -243,6 +240,14 @@ export async function buildApp(c: Config, db: pg.Pool) {
   app.get("/api/v1/sync/status", async (req) =>
     service.status(await owner(req)),
   );
+  app.get("/api/v1/sync/history", async (req) => {
+    const i = await owner(req);
+    const r = await db.query(
+      "SELECT b.device,b.created_at,jsonb_array_length(b.acknowledgements) AS processed,d.name FROM textkeep.ingestion_batches b JOIN textkeep.devices d ON d.id=b.device AND d.owner=b.owner WHERE b.owner=$1 ORDER BY b.created_at DESC LIMIT 100",
+      [i.uid],
+    );
+    return { uploads: r.rows, truncated: r.rowCount === 100 };
+  });
   app.get(
     "/api/v1/messages",
     {
