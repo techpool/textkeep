@@ -62,7 +62,7 @@ export async function buildApp(c: Config, db: pg.Pool) {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        scriptSrc: ["'self'", "https://apis.google.com"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         connectSrc: [
           "'self'",

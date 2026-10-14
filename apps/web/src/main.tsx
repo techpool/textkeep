@@ -60,7 +60,7 @@ import {
   signInWithPopup,
   signOut,
 } from "@firebase/auth";
-import { api, type Message, type PublicConfig } from "./api";
+import { ApiError, api, type Message, type PublicConfig } from "./api";
 import "./styles.css";
 const theme = createTheme({
   palette: {
@@ -595,19 +595,41 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
     [sensitive, setSensitive] = useState(false),
     [interaction, setInteraction] = useState<any>(null);
   const interactionId = new URLSearchParams(location.search).get("interaction");
+  const clearPrivateState = () => {
+    setUser(null);
+    setData(null);
+    setDevices([]);
+    setStatus(null);
+    setAccess(null);
+    setDetail(null);
+    setPurge(null);
+    setToken("");
+    setSensitive(false);
+    setInteraction(null);
+  };
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     try {
       await fn();
       setError("");
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) clearPrivateState();
       setError(e instanceof Error ? e.message : "Request failed");
     } finally {
       setBusy(false);
     }
   };
   const load = async () => {
-    const me = await api("/api/v1/me");
+    let me;
+    try {
+      me = await api("/api/v1/me");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        clearPrivateState();
+        return;
+      }
+      throw e;
+    }
     setUser(me);
     setDevices(await api("/api/v1/devices"));
     setStatus(await api("/api/v1/sync/status"));
@@ -709,7 +731,7 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
             onClick={() =>
               void run(async () => {
                 await api("/api/v1/auth/session", { method: "DELETE" });
-                setUser(null);
+                clearPrivateState();
               })
             }
           >

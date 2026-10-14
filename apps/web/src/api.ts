@@ -1,4 +1,12 @@
 let csrf = "";
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 export async function api<T = any>(
   path: string,
   options: RequestInit = {},
@@ -19,7 +27,11 @@ export async function api<T = any>(
     },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw Error(body.error || `Request failed (${res.status})`);
+  if (!res.ok)
+    throw new ApiError(
+      res.status,
+      body.error || `Request failed (${res.status})`,
+    );
   return body as T;
 }
 export interface Message {
