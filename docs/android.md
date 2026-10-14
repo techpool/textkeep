@@ -17,3 +17,17 @@ Android backup and device-transfer rules exclude local private state. The app do
 MMS is part of local default-handler responsibilities. WAP notifications are persisted and downloaded with native carrier APIs; failures remain visible and retryable. Attachments remain local. Carrier receive/download/send/display tests are required before daily default-handler use.
 
 Receipt identities use the telephony service’s `messageId` when supplied. Older/OEM deliveries without that identifier receive independent journal IDs, so genuinely identical messages are not merged by sender/body/timestamp or PDU content. Recovery of a retained journal is idempotent; duplicate broadcasts lacking a stable system ID can remain duplicated. Verify that behavior on the intended carrier/OEM.
+
+## Framework durability checks
+
+Build `assembleDebug assembleDebugAndroidTest`, install both generated APKs normally on a disposable emulator, and run:
+
+```sh
+ANDROID_HOME=/path/to/android-sdk node scripts/android-durability.mjs emulator-5554
+```
+
+The runner refuses physical devices and targets only the `.debug` application. Its staged journal check commits an encrypted synthetic receipt, leaves an unfinished AtomicFile replacement, force-stops the app, and verifies recovery in a different process. Separate checks reopen a real Room database after an acknowledgement races with a newer source revision, and round-trip a Unicode MMS retrieval PDU. It never sends carrier messages or uploads fixtures.
+
+These checks use Android's actual Keystore, files and SQLite through [AndroidJUnitRunner](https://developer.android.com/training/testing/instrumented-tests/androidx-test-libraries/runner). They do not establish real carrier MMS transport, Direct Boot before first unlock, or OEM background reliability. The staged methods are skipped in a generic connected-test run; use the script to exercise the required restart sequence.
+
+Add `--sms` to select the debug app through its normal onboarding and Android role picker, turn off emulator Wi-Fi/mobile data, inject a synthetic origin-bound OTP through the emulator radio, and assert provider persistence, private/public notification content, and the unlocked notification copy action. No role, permission or app-op is granted through a shell override. Debug installations use the distinct name “TextKeep Debug” to prevent ambiguity with a release app in the system picker.

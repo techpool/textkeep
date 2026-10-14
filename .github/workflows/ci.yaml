@@ -35,4 +35,4 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
-      - run: apps/android/gradlew -p apps/android testDebugUnitTest assembleDebug
+      - run: apps/android/gradlew -p apps/android testDebugUnitTest assembleDebug assembleDebugAndroidTest

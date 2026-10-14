@@ -5,6 +5,7 @@ android {
     compileSdk = 37
     defaultConfig {
         applicationId = "io.github.techpool.textkeep"; minSdk = 29; targetSdk = 37
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = setting("RUNNERMESH_BUILD_NUMBER", "2").toInt(); versionName = setting("RUNNERMESH_APP_VERSION", "0.1.1")
         buildConfigField("String", "DEFAULT_SERVER", "\"${setting("TEXTKEEP_SERVER", "")}\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"${setting("FIREBASE_ANDROID_APP_ID")}\"")
@@ -42,4 +43,7 @@ dependencies {
     implementation("com.klinkerapps:android-smsmms:5.2.6")
     implementation("androidx.fragment:fragment-ktx:1.9.1")
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0")
 }
