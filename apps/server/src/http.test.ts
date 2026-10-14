@@ -84,8 +84,16 @@ test(
         await fetch(origin + "/oauth/.well-known/oauth-authorization-server")
       ).json()) as any;
       assert.equal(metadata.issuer, origin + "/oauth");
+      for (const key of [
+        "authorization_endpoint",
+        "token_endpoint",
+        "registration_endpoint",
+        "revocation_endpoint",
+        "jwks_uri",
+      ])
+        assert.ok(metadata[key].startsWith(origin + "/oauth/"), key);
       assert.ok(metadata.code_challenge_methods_supported.includes("S256"));
-      const reg = await fetch(origin + "/oauth/reg", {
+      const reg = await fetch(metadata.registration_endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -132,6 +140,26 @@ test(
         "INSERT INTO textkeep.personal_access_tokens(id,owner,name,hash,expires_at) VALUES($1,$2,$3,$4,now()+interval '1 hour')",
         [randomUUID(), owner, "Synthetic token", secretHash(token)],
       );
+      const initialized = await fetch(origin + "/mcp", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-11-25",
+            capabilities: {},
+            clientInfo: { name: "cache-policy-test", version: "1" },
+          },
+        }),
+      });
+      assert.equal(initialized.status, 200);
+      assert.equal(initialized.headers.get("cache-control"), "no-store");
       const client = new Client({
         name: "http-synthetic-client",
         version: "1.0.0",

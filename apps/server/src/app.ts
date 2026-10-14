@@ -97,8 +97,10 @@ export async function buildApp(c: Config, db: pg.Pool) {
       req.url.startsWith("/mcp") ||
       req.url.startsWith("/oauth") ||
       req.url.startsWith("/app/access/")
-    )
+    ) {
       reply.header("Cache-Control", "no-store");
+      reply.raw.setHeader("Cache-Control", "no-store");
+    }
     if (
       ["POST", "PUT", "DELETE", "PATCH"].includes(req.method) &&
       req.cookies?.session &&
@@ -396,9 +398,18 @@ export async function buildApp(c: Config, db: pg.Pool) {
       "/oauth/*",
       { config: { rateLimit: { max: 30 } } },
       async (req, reply) => {
-        req.raw.url = req.raw.url?.replace(/^\/oauth/, "") || "/";
+        // The provider derives its external mount prefix from originalUrl.
+        // Preserve it so discovery and interaction redirects include /oauth.
+        const request = req.raw as typeof req.raw & { originalUrl?: string };
+        request.originalUrl = request.url;
+        request.url = request.url?.replace(/^\/oauth/, "") || "/";
         reply.hijack();
-        await oa.provider.callback()(req.raw, reply.raw);
+        try {
+          await oa.provider.callback()(request, reply.raw);
+        } finally {
+          request.url = request.originalUrl;
+          delete request.originalUrl;
+        }
       },
     );
   });
