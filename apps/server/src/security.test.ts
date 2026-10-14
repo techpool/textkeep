@@ -52,6 +52,21 @@ test("production fails closed for missing allowlist, emulator, insecure origin a
     OAUTH_JWKS: "{}",
   };
   assert.doesNotThrow(() => config(env));
+  assert.equal(config(env).registrationMode, "allowlist");
+  assert.equal(
+    config({ ...env, REGISTRATION_MODE: "google", ALLOWED_GOOGLE_EMAILS: "" })
+      .registrationMode,
+    "google",
+  );
+  assert.throws(() => config({ ...env, REGISTRATION_MODE: "all" }));
+  assert.throws(() =>
+    config({
+      ...env,
+      REGISTRATION_MODE: "google",
+      ALLOWED_GOOGLE_EMAILS: "",
+      OWNER_FIREBASE_UID: "synthetic-pin",
+    }),
+  );
   for (const patch of [
     { ALLOWED_GOOGLE_EMAILS: "" },
     { ALLOWED_GOOGLE_EMAILS: "*" },

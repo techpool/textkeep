@@ -189,13 +189,12 @@ export function oauth(c: Config, db: pg.Pool, vault: Vault) {
       const details = await provider.interactionDetails(req, res);
       const { uid, prompt, params, session } = details;
       if (prompt.name === "login") {
-        await provider.interactionFinished(
+        return await provider.interactionResult(
           req,
           res,
           { login: { accountId: i.uid, remember: false } },
           { mergeWithLastSubmission: false },
         );
-        return;
       }
       if (prompt.name !== "consent")
         throw new HttpError(400, "Unsupported interaction");
@@ -211,7 +210,7 @@ export function oauth(c: Config, db: pg.Pool, vault: Vault) {
         allowSensitive ? "messages:read messages:sensitive" : "messages:read",
       );
       await grant.save();
-      await provider.interactionFinished(
+      return await provider.interactionResult(
         req,
         res,
         { consent: { grantId: grant.jti } },

@@ -127,7 +127,7 @@ export async function buildApp(c: Config, db: pg.Pool) {
     firebase: c.firebaseWeb,
     release: c.releaseMetadata || null,
     consentVersion: "2026-10-14",
-    registration: "owner-allowlist",
+    registration: c.registrationMode,
   }));
   app.get("/api/v1/auth/csrf", async (req, reply) => {
     const token = randomBytes(32).toString("base64url");
@@ -389,8 +389,15 @@ export async function buildApp(c: Config, db: pg.Pool) {
     async (req, reply) => {
       auth.csrf(req);
       const i = await owner(req, true);
-      await oa.consent(req.raw, reply.raw, i, req.body.sensitive);
-      reply.hijack();
+      const redirectTo = await oa.consent(
+        req.raw,
+        reply.raw,
+        i,
+        req.body.sensitive,
+      );
+      // Resume OAuth as a top-level navigation. Fetch must never follow the
+      // eventual cross-origin client callback (including a native loopback URI).
+      return { redirectTo };
     },
   );
   await app.register(async (raw) => {

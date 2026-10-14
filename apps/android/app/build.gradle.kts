@@ -6,7 +6,7 @@ android {
     defaultConfig {
         applicationId = "io.github.techpool.textkeep"; minSdk = 29; targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = setting("RUNNERMESH_BUILD_NUMBER", "2").toInt(); versionName = setting("RUNNERMESH_APP_VERSION", "0.1.1")
+        versionCode = setting("RUNNERMESH_BUILD_NUMBER", "3").toInt(); versionName = setting("RUNNERMESH_APP_VERSION", "0.1.2")
         buildConfigField("String", "DEFAULT_SERVER", "\"${setting("TEXTKEEP_SERVER", "")}\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"${setting("FIREBASE_ANDROID_APP_ID")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${setting("FIREBASE_API_KEY")}\"")

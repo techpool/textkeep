@@ -2,7 +2,7 @@ version: 1
 project:
   framework: android
   appDirectory: .
-  appVersion: "0.1.1"
+  appVersion: "0.1.2"
   runTests: true
 tools:
   node: "24.14.1"

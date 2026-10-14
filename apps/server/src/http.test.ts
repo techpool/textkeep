@@ -30,6 +30,7 @@ test(
         origin,
         databaseUrl: url!,
         firebaseProject: "synthetic-auth",
+        registrationMode: "allowlist",
         allowedEmails: ["owner@example.test"],
         keyring: { v1: Buffer.alloc(32, 1).toString("base64") },
         activeKey: "v1",
@@ -278,6 +279,16 @@ test(
             },
             body: JSON.stringify({ approve: true, sensitive: false }),
           });
+          assert.equal(response.status, 200);
+          assert.equal(response.headers.get("location"), null);
+          const continuation = (
+            (await response.json()) as { redirectTo: string }
+          ).redirectTo;
+          assert.equal(new URL(continuation, origin).origin, origin);
+          assert.ok(
+            new URL(continuation, origin).pathname.startsWith("/oauth/"),
+          );
+          response = await browserFetch(continuation);
         } else response = await browserFetch(next.href);
       }
       assert.ok(callback, JSON.stringify(interactionTrace));

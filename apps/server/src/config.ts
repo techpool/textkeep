@@ -6,8 +6,10 @@ export interface Config {
   origin: string;
   databaseUrl: string;
   firebaseProject: string;
+  registrationMode: "allowlist" | "google";
   allowedEmails: string[];
   ownerUid?: string;
+  ownerEmail?: string;
   keyring: Record<string, string>;
   activeKey: string;
   lookupKey: string;
@@ -35,12 +37,24 @@ export function config(env: NodeJS.ProcessEnv = process.env): Config {
     Object.values(keyring).some((k) => Buffer.from(k, "base64").length !== 32)
   )
     throw Error("Message encryption keys must be 32 bytes");
-  const allowedEmails = required("ALLOWED_GOOGLE_EMAILS")
+  const registrationMode = z
+    .enum(["allowlist", "google"])
+    .parse(env.REGISTRATION_MODE || "allowlist");
+  const allowedEmails = (env.ALLOWED_GOOGLE_EMAILS || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
-  if (!allowedEmails.length || allowedEmails.includes("*"))
+  if (
+    (registrationMode === "allowlist" && !allowedEmails.length) ||
+    allowedEmails.includes("*")
+  )
     throw Error("Explicit account allowlist required");
+  const ownerEmail =
+    env.OWNER_GOOGLE_EMAIL?.toLowerCase() ||
+    (allowedEmails.length === 1 ? allowedEmails[0] : undefined);
+  if (env.OWNER_FIREBASE_UID && !ownerEmail)
+    throw Error("Pinned owner email required");
+  if (ownerEmail) z.email().parse(ownerEmail);
   if (
     production &&
     (!origin.startsWith("https://") ||
@@ -84,8 +98,10 @@ export function config(env: NodeJS.ProcessEnv = process.env): Config {
     origin,
     databaseUrl: required("DATABASE_URL"),
     firebaseProject: required("FIREBASE_PROJECT_ID"),
+    registrationMode,
     allowedEmails,
     ownerUid: env.OWNER_FIREBASE_UID,
+    ownerEmail,
     keyring,
     activeKey,
     lookupKey,

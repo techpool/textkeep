@@ -36,10 +36,11 @@ jobs:
         run: apps/android/gradlew -p apps/android assembleDebug assembleDebugAndroidTest --no-daemon -Pkotlin.compiler.execution.strategy=in-process
       - name: Verify framework recovery, the SMS role and offline copy
         run: |
+          set -euo pipefail
           mkdir -p .private
           "$ANDROID_HOME/emulator/emulator" -avd textkeep-ci -no-window -no-snapshot -no-boot-anim -no-audio -gpu software -cores 2 -memory 3072 > .private/emulator.log 2>&1 &
           TEXTKEEP_EMULATOR_PID=$!
-          trap 'kill "$TEXTKEEP_EMULATOR_PID" 2>/dev/null || true' EXIT
+          trap 'adb logcat -d -v threadtime > .private/framework-logcat.log 2>&1; kill "$TEXTKEEP_EMULATOR_PID" 2>/dev/null || true' EXIT
           timeout 120 adb wait-for-device
           for attempt in $(seq 1 90); do
             if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi

@@ -27,6 +27,7 @@ test(
       oauthJwks: {},
       port: 55439,
       firebaseProject: "synthetic-auth",
+      registrationMode: "allowlist",
       allowedEmails: [email],
       keyring: { v1: Buffer.alloc(32, 1).toString("base64") },
       activeKey: "v1",
@@ -77,6 +78,39 @@ test(
       );
       assert.equal(stored.rows[0].hash, secretHash(cookies[0]!));
       assert.notEqual(stored.rows[0].hash, cookies[0]);
+      // Public Google registration must not turn the primary owner's UID pin
+      // into access to anyone else's archive, or reject independent accounts.
+      c.registrationMode = "google";
+      c.ownerUid = uid;
+      c.ownerEmail = email;
+      const guest = {
+        ...decoded,
+        uid: uid + "-guest",
+        email: "guest-" + email,
+      };
+      try {
+        assert.equal((await auth.bind(guest)).uid, guest.uid);
+        assert.equal((await auth.bind(decoded)).uid, uid);
+        for (const rejected of [
+          { ...guest, email_verified: false },
+          { ...guest, firebase: { sign_in_provider: "password" } },
+          { ...guest, email },
+          { ...decoded, email: guest.email },
+        ])
+          await assert.rejects(auth.bind(rejected as DecodedIdToken), {
+            statusCode: 403,
+          });
+        await db.query("UPDATE textkeep.users SET disabled=true WHERE uid=$1", [
+          guest.uid,
+        ]);
+        await assert.rejects(auth.bind(guest), { statusCode: 403 });
+        c.registrationMode = "allowlist";
+        await assert.rejects(auth.bind({ ...guest, uid: uid + "-uninvited" }), {
+          statusCode: 403,
+        });
+      } finally {
+        await db.query("DELETE FROM textkeep.users WHERE uid=$1", [guest.uid]);
+      }
     } finally {
       await db.query(
         "DELETE FROM textkeep.revoked_web_sessions WHERE hash=$1",

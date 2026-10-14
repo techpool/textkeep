@@ -20,7 +20,8 @@ import java.util.concurrent.TimeUnit
 
 object CloudIdentity {
  fun auth(c:Context):FirebaseAuth {
-  val app=FirebaseApp.getApps(c).firstOrNull()?:FirebaseApp.initializeApp(FirebaseSecureContext(c.applicationContext),FirebaseOptions.Builder().setApplicationId(BuildConfig.FIREBASE_APP_ID).setApiKey(BuildConfig.FIREBASE_API_KEY).setProjectId(BuildConfig.FIREBASE_PROJECT_ID).build())
+  check(TelephonyCore.unlocked(c)){"Unlock before signing in"}
+  val app=FirebaseApp.getApps(c).firstOrNull()?:FirebaseApp.initializeApp(c.applicationContext,FirebaseOptions.Builder().setApplicationId(BuildConfig.FIREBASE_APP_ID).setApiKey(BuildConfig.FIREBASE_API_KEY).setProjectId(BuildConfig.FIREBASE_PROJECT_ID).build())
   return FirebaseAuth.getInstance(app)
  }
  fun settings(c:Context)=c.getSharedPreferences("settings",0)

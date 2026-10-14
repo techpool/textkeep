@@ -1,16 +1,10 @@
 package io.github.techpool.textkeep
 
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.SharedPreferences
 import org.json.JSONObject
 import org.json.JSONArray
 
-// Firebase's own persistence uses this context, so refresh credentials are sealed at rest.
-class FirebaseSecureContext(c:Context):ContextWrapper(c){
- override fun getApplicationContext():Context=this
- override fun getSharedPreferences(name:String,mode:Int):SharedPreferences=SecurePreferences(super.getSharedPreferences("sealed-$name",mode),name)
-}
 class SecurePreferences(private val source:SharedPreferences,private val namespace:String):SharedPreferences {
  private val listeners=java.util.concurrent.ConcurrentHashMap<SharedPreferences.OnSharedPreferenceChangeListener,SharedPreferences.OnSharedPreferenceChangeListener>()
  private fun context(key:String)="firebase-prefs:$namespace:$key"

@@ -35,7 +35,11 @@ Tests are PASS, FAIL or NOT TESTED. Code existing or an APK building is not devi
 | Source/history/release private-credential scans and license review                                   | PASS       | Gitleaks source/history; 0.1.1 APK checked against private secrets; NOTICE reviewed                                             |
 | Coolify origin health/shared database and push deploy                                                | PASS       | Non-root healthy container; existing PostgreSQL runtime role; signed webhook                                                    |
 | Public hostname TLS and ready health                                                                 | PASS       | Proxied DNS; hostname-only Cloudflare Strict TLS rule active; public HTTPS /health/ready returned 200                           |
-| RunnerMesh dedicated project/build-on-push                                                           | NOT TESTED | GitHub installation awaiting account re-authentication                                                                          |
+| RunnerMesh dedicated project/build-on-push                                                           | NOT TESTED | Repository installation verified; project/build configuration in progress                                                       |
+
+Release verification update: the automated Android framework run initially reported a successful job despite instrumented failures because a shell pipeline masked the test exit code. The workflow now enables `pipefail` and retains logcat diagnostics. Its Android 16 receipt-recovery and normal-role tests passed, but the origin-bound OTP receipt assertion failed; Android 17 instrumentation crashed before its first assertion. These automated gates are **FAIL**, pending correction and a new run. They do not replace the earlier manually observed Android 16 SMS result above.
+
+The 0.1.1 Firebase sign-in flow failed on a physical installer: its encrypted-preference context wrapper was cast to `Application` by the SDK. The correction uses the real application context and intercepts Firebase preferences in the application class. An Android 16 instrumented regression now initializes the real Firebase Auth SDK and verifies encrypted preference persistence. Physical Google sign-in remains **NOT TESTED** until the corrected release is installed and observed.
 
 Update rows only after the corresponding assertion or observed result. Do not broaden a unit result to untested physical behavior.
 

@@ -82,6 +82,29 @@ class DurabilityTest {
         }
     }
 
+    @Test fun firebaseAuthKeepsApplicationContextAndSealsPreferences() {
+        val application = context.applicationContext as TextKeepApp
+        val name = "synthetic-auth-${UUID.randomUUID()}"
+        val app = com.google.firebase.FirebaseApp.initializeApp(application,
+            com.google.firebase.FirebaseOptions.Builder()
+                .setApplicationId("1:123456789:android:1234567890abcdef")
+                .setApiKey("AIza" + "0".repeat(35))
+                .setProjectId("synthetic-auth-test").build(), name)
+        val namespace = "com.google.firebase.auth.synthetic.$name"
+        try {
+            assertSame(application, app.applicationContext)
+            assertNull(com.google.firebase.auth.FirebaseAuth.getInstance(app).currentUser)
+            val preferences = application.getSharedPreferences(namespace, Context.MODE_PRIVATE)
+            assertTrue(preferences.edit().putString("refresh-token", "synthetic-credential").commit())
+            assertEquals("synthetic-credential", preferences.getString("refresh-token", null))
+            val raw = application.baseContext.getSharedPreferences("sealed-$namespace", Context.MODE_PRIVATE)
+            assertFalse(raw.getString("refresh-token", null)!!.contains("synthetic-credential"))
+        } finally {
+            app.delete()
+            application.baseContext.deleteSharedPreferences("sealed-$namespace")
+        }
+    }
+
     @Test fun mmsTextPduPreservesUnicodeAndHeaders() {
         val pdu = SendReq().apply {
             mmsVersion = PduHeaders.MMS_VERSION_1_2

@@ -40,8 +40,14 @@ export class Auth {
       !token.email_verified ||
       token.firebase.sign_in_provider !== "google.com" ||
       !token.email ||
-      !this.c.allowedEmails.includes(token.email.toLowerCase()) ||
-      (this.c.ownerUid && token.uid !== this.c.ownerUid)
+      (this.c.registrationMode === "allowlist" &&
+        !this.c.allowedEmails.includes(token.email.toLowerCase())) ||
+      (this.c.ownerUid &&
+        token.email.toLowerCase() === this.c.ownerEmail &&
+        token.uid !== this.c.ownerUid) ||
+      (this.c.ownerUid &&
+        token.uid === this.c.ownerUid &&
+        token.email.toLowerCase() !== this.c.ownerEmail)
     )
       throw new HttpError(403, "Account is not authorized");
     const row = await this.db.query(

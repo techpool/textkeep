@@ -14,6 +14,13 @@ function command(args, timeout = 180000) {
 }
 if (command(["shell", "getprop", "ro.boot.qemu"]).trim() !== "1")
   throw Error("Refusing to run on a physical phone");
+const runtimeApi = command(["shell", "getprop", "ro.build.version.sdk"]).trim();
+if (
+  process.env.TEXTKEEP_EXPECTED_ANDROID_API &&
+  runtimeApi !== process.env.TEXTKEEP_EXPECTED_ANDROID_API
+)
+  throw Error("Unexpected runtime Android API: " + runtimeApi);
+console.log("Runtime Android API", runtimeApi);
 const target = "io.github.techpool.textkeep.debug";
 const suite = "io.github.techpool.textkeep.DurabilityTest";
 function test(method, stage, className = suite) {
@@ -44,6 +51,7 @@ command(["shell", "am", "force-stop", target]);
 test("verifyCommittedJournalAfterRestart", "verify");
 test("acknowledgementCannotEraseAnEditMadeDuringUpload");
 test("mmsTextPduPreservesUnicodeAndHeaders");
+test("firebaseAuthKeepsApplicationContextAndSealsPreferences");
 if (process.argv.includes("--sms")) {
   const smsSuite = "io.github.techpool.textkeep.DefaultSmsTest";
   test("selectThroughNormalSystemRolePrompt", undefined, smsSuite);

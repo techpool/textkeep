@@ -469,9 +469,11 @@ function Landing({ config }: { config: PublicConfig | null }) {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Version {config.release.version}. Local messaging is available
-                to installers; hosted cloud sync is restricted to explicitly
-                authorized accounts. Test SMS and MMS before changing your daily
-                phone’s default app.
+                to installers.{" "}
+                {config.registration === "google"
+                  ? "Verified Google users can enable sync to their own private archive."
+                  : "Hosted sync requires an invited Google account."}{" "}
+                Test SMS and MMS before changing your daily phone’s default app.
               </Typography>
               <Typography className="digest" variant="caption">
                 APK SHA-256: {config.release.sha256}
@@ -701,8 +703,11 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                 Your private inbox.
               </Typography>
               <Typography color="text.secondary" sx={{ my: 3 }}>
-                Sign in with an authorized Google account. Installing the APK
-                does not grant access to another person’s archive.
+                {config?.registration === "google"
+                  ? "Sign in with Google to open your own private archive."
+                  : "Sign in with an invited Google account."}{" "}
+                Installing the APK does not grant access to another person’s
+                archive.
               </Typography>
               {error && (
                 <Alert severity="error" sx={{ mb: 2 }}>
@@ -1008,9 +1013,18 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                           },
                           body: JSON.stringify({ sensitive, approve: true }),
                         });
-                        if (res.redirected) window.location.assign(res.url);
-                        else if (!res.ok) throw Error("Consent failed");
-                        else window.location.reload();
+                        if (!res.ok) throw Error("Consent failed");
+                        const { redirectTo } = await res.json();
+                        const destination = new URL(
+                          redirectTo,
+                          window.location.origin,
+                        );
+                        if (
+                          destination.origin !== window.location.origin ||
+                          !destination.pathname.startsWith("/oauth/")
+                        )
+                          throw Error("Invalid authorization continuation");
+                        window.location.assign(destination.href);
                       })
                     }
                   >
