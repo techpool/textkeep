@@ -1,0 +1,26 @@
+version: 1
+project:
+  framework: android
+  appDirectory: .
+  appVersion: "0.1.0"
+  runTests: true
+tools:
+  node: "24.14.1"
+  java: "21.0.8+9"
+android:
+  directory: apps/android
+  module: app
+  variant: release
+  packageName: io.github.techpool.textkeep
+hooks:
+  preBuild:
+    - name: Validate web and API
+      shell: bash
+      run: |
+        npm ci
+        npm run build
+        npm run check
+        npm test
+        npm run secret-scan
+      timeoutSeconds: 900
+      platforms: [android]

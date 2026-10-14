@@ -1,0 +1,16 @@
+.git
+.private
+.local
+**/node_modules
+**/build
+**/.gradle
+**/dist
+**/local.properties
+**/google-services*.json
+.env*
+*.jks
+*.keystore
+*.pem
+*.key
+*.apk
+*.aab

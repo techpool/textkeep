@@ -1,0 +1,13 @@
+TextKeep
+Copyright 2026 TextKeep contributors
+
+This project uses Android Jetpack/Material 3, Firebase SDKs, React, Material UI,
+Fastify, node-postgres, oidc-provider, the Model Context Protocol SDK and other
+open-source libraries. Their respective copyrights and licenses apply.
+
+Android MMS protocol parsing and provider persistence use com.klinkerapps:
+android-smsmms 5.2.6, copyright Jacob Klinker (Apache License 2.0), incorporating
+licensed Android Open Source Project components. The upstream repository was
+archived in March 2026. TextKeep invokes Android's carrier transport APIs and
+must independently validate device/carrier compatibility; this dependency is
+not represented as actively maintained or proof of current carrier reliability.

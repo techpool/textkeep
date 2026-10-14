@@ -1,0 +1,249 @@
+html {
+  scroll-behavior: smooth;
+}
+body {
+  margin: 0;
+}
+.logo {
+  width: 40px;
+  height: 40px;
+  background: #185e50;
+  color: #fff;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+}
+.wordmark-dot {
+  color: #9d5d32;
+  margin-left: -6px;
+}
+.hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 60px;
+  align-items: center;
+  min-height: 690px;
+  padding: 55px 0 70px;
+}
+.accent {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-style: italic;
+  color: #185e50;
+}
+.small-proof {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 34px;
+  font-size: 13px;
+  color: #63766b;
+}
+.phone-scene {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: 20px 10px;
+  background: radial-gradient(
+    ellipse at center,
+    #dcebdd 0%,
+    #edf3e7 52%,
+    transparent 73%
+  );
+}
+.scene-label {
+  position: absolute;
+  top: 0;
+  right: 0;
+  letter-spacing: 0.13em;
+  font-size: 10px;
+  color: #6b806d;
+}
+.phone {
+  border: 7px solid #16372f;
+  border-radius: 40px;
+  background: #f9fcf7;
+  width: 296px;
+  min-height: 540px;
+  padding: 14px 18px 22px;
+  box-shadow: 0 25px 50px #193b2b22;
+  transform: rotate(3deg);
+}
+.phone-status {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 26px;
+}
+.phone-top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.phone-top strong {
+  flex: 1;
+  font-size: 19px;
+}
+.phone-search {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border-radius: 20px;
+  background: #edf3eb;
+  padding: 10px;
+  font-size: 11px;
+  color: #688071;
+}
+.mock-row {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin: 22px 0;
+}
+.sender-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: #e1eadf;
+  border-radius: 50%;
+  flex-shrink: 0;
+  color: #246253;
+  font-size: 16px;
+  font-weight: 600;
+}
+.sender-icon.muted {
+  background: #ece9df;
+  color: #977953;
+}
+.mock-row .sender-icon {
+  width: 34px;
+  height: 34px;
+}
+.mock-row strong {
+  font-size: 12px;
+}
+.mock-row p {
+  margin: 4px 0;
+  color: #7a887b;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.mock-row small {
+  font-size: 9px;
+  color: #809080;
+}
+.mock-date {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: #8c998d;
+  margin: 30px 0 14px;
+}
+.otp-card {
+  border-radius: 16px;
+  background: white;
+  border: 1px solid #dce7dc;
+  padding: 15px;
+  box-shadow: 0 8px 14px #1435220b;
+}
+.offline-pill {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  position: absolute;
+  bottom: 38px;
+  left: -10px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #dce7dc;
+  padding: 14px 17px;
+  box-shadow: 0 10px 25px #184d2f15;
+  transform: rotate(-2deg);
+}
+.offline-pill strong {
+  font-size: 12px;
+}
+.offline-pill small {
+  font-size: 10px;
+  color: #6a7c70;
+}
+.architecture {
+  margin-top: 75px;
+  padding: 48px 55px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 50px;
+  background: #edf3e7;
+  border-radius: 28px;
+}
+.architecture-flow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.architecture-flow > div {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  column-gap: 12px;
+  min-width: 255px;
+  border: 1px solid #cfdccb;
+  background: #fff;
+  padding: 18px 24px;
+  border-radius: 14px;
+}
+.architecture-flow svg {
+  grid-row: span 2;
+  align-self: center;
+  color: #185e50;
+}
+.architecture-flow strong {
+  font-size: 14px;
+}
+.architecture-flow small {
+  color: #778575;
+  font-size: 11px;
+  margin-top: 5px;
+}
+.architecture-flow > span {
+  font-size: 11px;
+  color: #768a77;
+}
+.digest {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 16px;
+}
+.message-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+@media (max-width: 850px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 45px;
+    padding-top: 35px;
+  }
+  .phone-scene {
+    margin: 20px 0;
+    max-width: 430px;
+  }
+  .architecture {
+    grid-template-columns: 1fr;
+    padding: 30px;
+    gap: 30px;
+  }
+  .offline-pill {
+    left: 0;
+  }
+  .scene-label {
+    right: 15px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

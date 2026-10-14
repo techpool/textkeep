@@ -1,0 +1,33 @@
+{
+  "name": "textkeep",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/server",
+    "apps/web",
+    "packages/contracts",
+    "packages/mcp-client"
+  ],
+  "engines": {
+    "node": ">=24.14.1 <25"
+  },
+  "scripts": {
+    "build": "npm run build -w @textkeep/contracts && npm run build -w @textkeep/server && npm run build -w @textkeep/web && npm run build -w @textkeep/mcp-client",
+    "check": "npm run check --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev": "npm run dev -w @textkeep/server",
+    "secret-scan": "node scripts/secret-scan.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/oidc-provider": "9.12.1",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  }
+}

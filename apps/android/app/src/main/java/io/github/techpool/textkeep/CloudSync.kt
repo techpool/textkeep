@@ -1,0 +1,107 @@
+package io.github.techpool.textkeep
+import android.content.Context
+import android.Manifest
+import android.content.pm.PackageManager
+import android.provider.Telephony
+import androidx.core.content.ContextCompat
+import androidx.work.*
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.tasks.await
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.*
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+
+object CloudIdentity {
+ fun auth(c:Context):FirebaseAuth {
+  val app=FirebaseApp.getApps(c).firstOrNull()?:FirebaseApp.initializeApp(FirebaseSecureContext(c.applicationContext),FirebaseOptions.Builder().setApplicationId(BuildConfig.FIREBASE_APP_ID).setApiKey(BuildConfig.FIREBASE_API_KEY).setProjectId(BuildConfig.FIREBASE_PROJECT_ID).build())
+  return FirebaseAuth.getInstance(app)
+ }
+ fun settings(c:Context)=c.getSharedPreferences("settings",0)
+ suspend fun credential(c:Context,key:String)=LocalStore.get(c).dao().state(key)?.let{LocalCrypto.decrypt(it)}
+ suspend fun setCredential(c:Context,key:String,value:String)=LocalStore.get(c).dao().state(State(key,LocalCrypto.encrypt(value)))
+ val http=OkHttpClient.Builder().callTimeout(45,TimeUnit.SECONDS).build()
+ suspend fun request(c:Context,path:String,method:String="GET",body:JSONObject?=null,device:Boolean=false):JSONObject {
+  val user=auth(c).currentUser?:error("Sign in to sync");val server=settings(c).getString("server",BuildConfig.DEFAULT_SERVER)?.trimEnd('/')?:error("Server required")
+  require(server.startsWith("https://")){"An HTTPS server is required"}
+  for(attempt in 0..1){val token=user.getIdToken(attempt==1).await().token?:error("Sign in again")
+   val b=Request.Builder().url(server+path).header("Authorization","Bearer $token")
+   if(device)b.header("X-Device-Token",credential(c,"deviceToken")?:error("Register this device"))
+   if(body!=null)b.method(method,body.toString().toRequestBody("application/json".toMediaType())) else b.method(method,null)
+   http.newCall(b.build()).execute().use{r->if(r.code==401&&attempt==0)continue
+    if(r.code==403){settings(c).edit().putBoolean("sync",false).apply();error("Access paused: account or device authorization was denied")}
+    if(r.code==429){
+      val retry=r.header("Retry-After");val after=retry?.toLongOrNull()?.let{System.currentTimeMillis()+it.coerceIn(1,86400)*1000}?:runCatching{java.time.ZonedDateTime.parse(retry,java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli()}.getOrElse{System.currentTimeMillis()+60000}
+      LocalStore.get(c).dao().state(State("retryAfter",after.toString()));throw java.io.IOException("Server requested upload backoff")
+    }
+    if(!r.isSuccessful)throw java.io.IOException("Server returned ${r.code}")
+    return JSONObject(r.body?.string()?:"{}")
+   }
+  };error("Sign in again")
+ }
+ suspend fun register(c:Context){
+  val dao=LocalStore.get(c).dao();val uid=auth(c).currentUser?.uid?:error("Sign in first");val server=settings(c).getString("server",BuildConfig.DEFAULT_SERVER)?:error("Server required");val accountBinding="$server|$uid"
+  val oldBinding=dao.state("accountBinding");require(oldBinding==null||oldBinding==accountBinding){"Account changed. Save the server to reset the queue and provide fresh consent."}
+  if(dao.state("deviceId")!=null){request(c,"/api/v1/me");return}
+  val r=request(c,"/api/v1/devices","POST",JSONObject().put("name",android.os.Build.MODEL).put("consentVersion","2026-10-14"));setCredential(c,"deviceToken",r.getString("token"));dao.state(State("deviceId",r.getString("id")));dao.state(State("accountBinding",accountBinding));dao.clearSources()
+ }
+ suspend fun signOut(c:Context){settings(c).edit().putBoolean("sync",false).apply();WorkManager.getInstance(c).cancelAllWorkByTag("cloud");auth(c).signOut()}
+}
+object SyncScheduler {
+ fun periodic(c:Context){if(!TelephonyCore.unlocked(c))return;WorkManager.getInstance(c).enqueueUniquePeriodicWork("reconcile",ExistingPeriodicWorkPolicy.KEEP,PeriodicWorkRequestBuilder<ReconcileWorker>(15,TimeUnit.MINUTES).build())}
+ fun now(c:Context){if(!TelephonyCore.unlocked(c))return;WorkManager.getInstance(c).enqueueUniqueWork("reconcile-now",ExistingWorkPolicy.KEEP,OneTimeWorkRequestBuilder<ReconcileWorker>().build())}
+ fun upload(c:Context){val unmetered=CloudIdentity.settings(c).getBoolean("wifiOnly",false);WorkManager.getInstance(c).enqueueUniqueWork("upload",ExistingWorkPolicy.KEEP,OneTimeWorkRequestBuilder<UploadWorker>().addTag("cloud").setConstraints(Constraints.Builder().setRequiredNetworkType(if(unmetered)NetworkType.UNMETERED else NetworkType.CONNECTED).build()).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,TimeUnit.SECONDS).build())}
+}
+class ReconcileWorker(c:Context,p:WorkerParameters):CoroutineWorker(c,p){override suspend fun doWork():Result {val c=applicationContext
+ if(!TelephonyCore.unlocked(c)||ContextCompat.checkSelfPermission(c,Manifest.permission.READ_SMS)!=PackageManager.PERMISSION_GRANTED)return Result.success()
+ try{
+  TelephonyCore.replay(c);val dao=LocalStore.get(c).dao();var epoch=dao.state("epoch")?:UUID.randomUUID().toString().also{dao.state(State("epoch",it))}
+  var maximum=0L
+  c.contentResolver.query(Telephony.Sms.CONTENT_URI,arrayOf("_id"),null,null,"_id DESC LIMIT 1")?.use{if(it.moveToFirst())maximum=it.getLong(0)}
+  val previousMax=dao.state("providerMaximum")?.toLongOrNull()?:0L;val anchorId=dao.state("anchorId")?.toLongOrNull();val anchorSignature=dao.state("anchorSignature")
+  if(maximum<previousMax&&maximum>0&&anchorId!=null&&anchorSignature!=null){
+   c.contentResolver.query(Telephony.Sms.CONTENT_URI,arrayOf("address","date","type"),"_id=?",arrayOf(anchorId.toString()),null)?.use{if(it.moveToFirst()){
+    val signature=LocalCrypto.hash((it.getString(0)+"|"+it.getLong(1)).toByteArray())
+    if(it.getInt(2)==1&&signature!=anchorSignature){epoch=UUID.randomUUID().toString();dao.state(State("epoch",epoch));dao.state(State("scanCursor","0"));dao.state(State("providerReset","Detected changed provider namespace; older cloud identities are retained"))}
+   }}
+  }
+  dao.state(State("providerMaximum",maximum.toString()))
+  c.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI,arrayOf("_id","address","date"),null,null,"_id ASC LIMIT 1")?.use{if(it.moveToFirst()){dao.state(State("anchorId",it.getLong(0).toString()));dao.state(State("anchorSignature",LocalCrypto.hash((it.getString(1)+"|"+it.getLong(2)).toByteArray())))}}
+  val server=CloudIdentity.settings(c).getString("server",BuildConfig.DEFAULT_SERVER)?:"";val uid=runCatching{CloudIdentity.auth(c).currentUser?.uid}.getOrNull()?:""
+  val binding="$server|$uid|${dao.state("deviceId")?:""}"
+  var cursor=dao.state("scanCursor")?.toLongOrNull()?:0L
+  val columns=arrayOf("_id","address","body","date","date_sent","type","read","seen","thread_id","sub_id","status")
+  var count=0
+  while(count<2000&&!isStopped){var last=cursor
+   c.contentResolver.query(Telephony.Sms.CONTENT_URI,columns,"_id>?",arrayOf(cursor.toString()),"_id ASC LIMIT 200")?.use{rows->while(rows.moveToNext()) {
+    fun str(i:Int):String {return if(rows.isNull(i))"" else rows.getString(i)}
+    val id=rows.getLong(0);last=id
+    val j=JSONObject().put("providerId",id.toString()).put("epoch",epoch).put("address",str(1)).put("body",str(2)).put("date",rows.getLong(3)).put("dateSent",rows.getLong(4)).put("type",rows.getInt(5)).put("read",rows.getInt(6)!=0).put("seen",rows.getInt(7)!=0).put("threadId",str(8)).put("subscriptionId",rows.getInt(9)).put("deliveryStatus",rows.getInt(10)).put("otp",OtpParser.parse(str(2))?:JSONObject.NULL).put("parserVersion",OtpParser.VERSION)
+    val digest=LocalCrypto.hash(j.toString().toByteArray());val old=dao.source(epoch,id)
+    if(old==null||old.digest!=digest){val rev=(old?.revision?:0)+1;j.put("revision",rev);dao.source(Source(epoch,id,digest,rev,LocalCrypto.encrypt(j.toString()),old?.uploadedRevision?:0,binding=binding))};count++
+   }}
+   if(last==cursor){cursor=0L;break};cursor=last;dao.state(State("scanCursor",cursor.toString()))
+  }
+  dao.state(State("scanCursor",cursor.toString()));dao.state(State("lastReconcile",System.currentTimeMillis().toString()))
+  if(CloudIdentity.settings(c).getBoolean("sync",false)&&uid.isNotEmpty())SyncScheduler.upload(c)
+  if(cursor>0)SyncScheduler.now(c)
+  return Result.success()
+ }catch(e:Exception){LocalStore.get(c).dao().state(State("syncError",e.message?:"Local reconciliation failed"));return Result.retry()}
+}}
+class UploadWorker(c:Context,p:WorkerParameters):CoroutineWorker(c,p){override suspend fun doWork():Result{val c=applicationContext;val dao=LocalStore.get(c).dao()
+ if(!CloudIdentity.settings(c).getBoolean("sync",false))return Result.success()
+ if((dao.state("retryAfter")?.toLongOrNull()?:0)>System.currentTimeMillis())return Result.retry()
+ try{val uid=CloudIdentity.auth(c).currentUser?.uid?:return Result.success();val server=CloudIdentity.settings(c).getString("server",BuildConfig.DEFAULT_SERVER)?:return Result.failure();val device=dao.state("deviceId")?:return Result.failure();val binding="$server|$uid|$device"
+  repeat(20){if(isStopped)return Result.retry();val records=dao.pending(binding);if(records.isEmpty())return Result.success()
+   val array=JSONArray();var bytes=0;val selected=records.takeWhile{val size=LocalCrypto.decrypt(it.encrypted).toByteArray().size;bytes+=size;bytes<=500_000};selected.forEach{array.put(JSONObject(LocalCrypto.decrypt(it.encrypted)))}
+   if(selected.isEmpty())return Result.failure()
+   val r=CloudIdentity.request(c,"/api/v1/sync/batches","POST",JSONObject().put("deviceId",device).put("batchId",UUID.randomUUID().toString()).put("records",array),true)
+   val a=r.getJSONArray("acknowledgements");for(i in 0 until a.length()){val ack=a.getJSONObject(i);val id=ack.optString("providerId").toLongOrNull()?:continue;val row=selected.find{it.providerId==id}?:continue;val error=if(ack.optString("status") in listOf("committed","suppressed","stale"))null else ack.optString("error","Record rejected");dao.acknowledge(row.epoch,id,row.revision,error)}
+   dao.state(State("lastUpload",System.currentTimeMillis().toString()));dao.state(State("syncError",""))
+  };return Result.retry()
+ }catch(e:Exception){dao.state(State("syncError",e.message?:"Upload failed"));return Result.retry()}
+}}

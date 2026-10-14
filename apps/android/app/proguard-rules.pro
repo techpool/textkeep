@@ -1,0 +1,3 @@
+-keep class com.google.android.mms.** { *; }
+-keep class com.android.mms.** { *; }
+-keep class com.klinker.android.** { *; }

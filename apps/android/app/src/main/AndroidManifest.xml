@@ -1,0 +1,27 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+ <uses-feature android:name="android.hardware.telephony" android:required="true"/>
+ <uses-permission android:name="android.permission.READ_SMS"/><uses-permission android:name="android.permission.RECEIVE_SMS"/><uses-permission android:name="android.permission.SEND_SMS"/>
+ <uses-permission android:name="android.permission.RECEIVE_MMS"/><uses-permission android:name="android.permission.RECEIVE_WAP_PUSH"/>
+ <uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+ <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+ <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+ <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:node="remove"/>
+ <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" tools:node="remove"/>
+ <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove"/>
+ <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" tools:node="remove"/>
+ <application android:name=".TextKeepApp" android:label="TextKeep" android:theme="@style/AppTheme" android:icon="@drawable/ic_message" android:allowBackup="false" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false" tools:replace="android:allowBackup">
+  <activity android:name=".MainActivity" android:exported="true">
+   <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+   <intent-filter><action android:name="android.intent.action.SENDTO"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="sms"/><data android:scheme="smsto"/><data android:scheme="mms"/><data android:scheme="mmsto"/></intent-filter>
+   <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="image/*"/><data android:mimeType="text/plain"/></intent-filter>
+  </activity>
+  <activity android:name=".CopyCodeActivity" android:exported="false" android:excludeFromRecents="true"/>
+  <receiver android:name=".SmsDeliveryReceiver" android:permission="android.permission.BROADCAST_SMS" android:exported="true" android:directBootAware="true"><intent-filter><action android:name="android.provider.Telephony.SMS_DELIVER"/></intent-filter></receiver>
+  <receiver android:name=".MmsDeliveryReceiver" android:permission="android.permission.BROADCAST_WAP_PUSH" android:exported="true" android:directBootAware="true"><intent-filter><action android:name="android.provider.Telephony.WAP_PUSH_DELIVER"/><data android:mimeType="application/vnd.wap.mms-message"/></intent-filter></receiver>
+  <receiver android:name=".SmsResultReceiver" android:exported="false"/>
+  <receiver android:name=".MmsResultReceiver" android:exported="false"/>
+  <receiver android:name=".UnlockReceiver" android:exported="false" android:directBootAware="true"><intent-filter><action android:name="android.intent.action.USER_UNLOCKED"/><action android:name="android.intent.action.MY_PACKAGE_REPLACED"/></intent-filter></receiver>
+  <service android:name=".RespondViaMessageService" android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE" android:exported="true"><intent-filter><action android:name="android.intent.action.RESPOND_VIA_MESSAGE"/><category android:name="android.intent.category.DEFAULT"/><data android:scheme="sms"/><data android:scheme="smsto"/><data android:scheme="mms"/><data android:scheme="mmsto"/></intent-filter></service>
+  <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.mms" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/mms_paths"/></provider>
+ </application>
+</manifest>

@@ -1,0 +1,15 @@
+# Architecture and threat model
+
+Android telephony delivery writes an envelope-encrypted Direct Boot-safe receipt before normal provider processing. Tink hybrid encryption uses a public keyset in device-protected storage. Its private keyset is encrypted by Android Keystore and stored in credential-protected, non-backed-up storage; it is inaccessible before first unlock. Firebase refresh persistence also passes through Keystore-encrypted preferences. After first unlock, replay writes the provider record and an encrypted Room receipt, then posts a fresh local notification. WorkManager performs bounded provider reconciliation and authenticated at-least-once uploads. The provider and Room do not share an atomic transaction; crash recovery must be tested at every boundary.
+
+SMS identity is owner + device + provider epoch + provider row ID, with revisions for mutable state. Identical message content is not used as cloud identity. PostgreSQL unique constraints and revision checks make committed-response retries safe. Malformed records are individually rejected. Explicit archive purges create suppression rows before deletion.
+
+The TypeScript/Fastify service serves static web assets, API and read-only Streamable HTTP MCP. Shared Zod schemas drive API input validation and OpenAPI. PostgreSQL stores encrypted message bodies/senders and OAuth library payloads. AES-256-GCM uses fresh nonces and owner/message-associated data; HMAC lookup supports exact sender filters. Searches decrypt at most 500 candidates per request and return truthful continuation/incomplete-scan status.
+
+Google identity verification checks signature, issuer/audience, expiry, revocation, verified email, Google provider and explicit allowlist. Ingestion additionally requires an owner-bound revocable device token. Web sessions are secure HttpOnly cookies with recent-auth and origin/CSRF checks. OAuth uses oidc-provider with PostgreSQL persistence, exact redirect validation, mandatory PKCE, resource binding, short access tokens and rotated refresh tokens. Access tokens are separate from Firebase credentials.
+
+Default MCP scope excludes recognized security/recovery/OTP messages and filters likely sensitive values. Every retrieval path uses the same service policy. Sensitive consent requires recent owner login. Tool annotations do not replace authorization. Message text and links remain inert data.
+
+Threats include stolen phones, database leaks, compromised application servers, authorized AI clients disclosing content, prompt injection inside SMS, provider resets and failed carrier transport. Metadata remains visible in a database leak. An application compromise can decrypt content. No classifier guarantees perfect sensitivity detection.
+
+The Apache-licensed Klinker MMS component supplies AOSP PDU parsing/composition/persistence. Android `SmsManager` supplies carrier download/send transport. The dependency is archived and compatibility must be verified; it is not described as maintained. No carrier reliability claim should be made from compilation or emulator SMS tests.
