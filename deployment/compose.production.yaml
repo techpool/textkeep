@@ -22,7 +22,7 @@ services:
       APK_PATH: /run/textkeep/textkeep.apk
       RELEASE_METADATA_PATH: /run/textkeep/release.json
     volumes:
-      - ${PRIVATE_RUNTIME_DIRECTORY:?Configure private runtime files}:/run/textkeep:ro
+      - /data/textkeep/private:/run/textkeep:ro
     networks: [database]
     mem_limit: 768m
     cpus: 1

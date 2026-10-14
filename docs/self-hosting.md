@@ -25,3 +25,5 @@ Create an application from your trusted Git repository and main branch with the 
 Use RunnerMesh for trusted Android pushes: create a dedicated project, bind only this repository, configure the native Android directory/module, authorize its signing credential and Firebase environment group, and enable the exact main-branch rule. Do not run untrusted public pull requests on a personal persistent runner. The supplied YAML has no literal secrets and does not publish to Google Play.
 
 There is no additional backup/restore system. Database or key loss can lose server copies. Preserve your existing infrastructure policies.
+
+Coolify validates bind mounts before expanding variables. The production Compose file uses `/data/textkeep/private` as its conventional private runtime directory. Create that directory on the deployment host with access limited to the application UID (1000), or edit the bind path for your host before deployment.
