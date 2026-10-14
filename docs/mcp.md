@@ -25,4 +25,8 @@ For a local desktop client, create a short-lived personal token in access settin
 
 The adapter calls the same remote MCP endpoint and exposes the five read-only tools over stdio. It is a separate local-token integration; it does not imply universal remote OAuth compatibility. Returned messages may leave your server through the authorized client's provider.
 
-Verification includes a local HTTP authorization/consent flow with only the Google identity boundary stubbed, actual PKCE exchange, a remote SDK client, rotating refresh tokens, reuse-triggered grant revocation and rejected access afterward. Live Google-owner OAuth consent and client-provider compatibility remain separate deployment gates.
+Verification includes a local HTTP authorization/consent flow with only the Google identity boundary stubbed, actual PKCE exchange, a remote SDK client, rotating refresh tokens, reuse-triggered grant revocation and rejected access afterward. Client-provider compatibility remains a separate deployment gate.
+
+Consent requires Google authentication within the last five minutes. If asked to sign in again, use the button beside the consent action. An expired authorization request must be restarted from the MCP client. A browser login can remain valid longer than the confirmation window. OAuth and personal-token sensitive-access choices are independent; declining the sensitive scope issues a narrower token without repeating consent.
+
+The live deployment was verified with an actual Google-owner OAuth session, mandatory S256 PKCE, the official remote SDK, five read-only tool annotations, sync status, refresh rotation, reuse-triggered grant revocation and access denial afterward. This does not assert compatibility with every client or physical phone scenario.

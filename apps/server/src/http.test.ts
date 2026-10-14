@@ -237,12 +237,24 @@ test(
       ).json()) as {
         token: string;
       };
+      const repeatedCsrf = await browserFetch("/api/v1/auth/csrf");
+      assert.equal(
+        ((await repeatedCsrf.json()) as any).token,
+        fixtureCsrf.token,
+        "Another tab must not invalidate the browser's existing confirmation token",
+      );
+      const expiredInteraction = await browserFetch("/app/access/interaction");
+      assert.equal(expiredInteraction.status, 400);
+      assert.match(
+        ((await expiredInteraction.json()) as any).error,
+        /expired.*Restart/,
+      );
       const verifier = randomBytes(48).toString("base64url");
       const state = randomUUID();
       const grantParams = new URLSearchParams({
         ...Object.fromEntries(params),
         resource: origin + "/mcp",
-        scope: "openid offline_access messages:read",
+        scope: "openid offline_access messages:read messages:sensitive",
         state,
         prompt: "consent",
         code_challenge: createHash("sha256")
@@ -313,6 +325,11 @@ test(
         code_verifier: verifier,
       });
       assert.equal(issued.status, 200);
+      assert.ok(issued.scope.split(" ").includes("messages:read"));
+      assert.ok(
+        !issued.scope.split(" ").includes("messages:sensitive"),
+        "Declining sensitive access must reduce scope without repeating consent",
+      );
       assert.ok(issued.refresh_token);
       const authorized = new Client({ name: "oauth-http-test", version: "1" });
       await authorized.connect(

@@ -57,39 +57,17 @@ if (process.argv.includes("--sms")) {
   test("selectThroughNormalSystemRolePrompt", undefined, smsSuite);
   command(["shell", "svc", "wifi", "disable"]);
   command(["shell", "svc", "data", "disable"]);
-  const body = Buffer.from(
-    "Your OTP is 515253.\n@example.test #515253",
-    "utf16le",
-  );
-  for (let i = 0; i < body.length; i += 2)
-    [body[i], body[i + 1]] = [body[i + 1], body[i]];
-  const now = new Date();
-  const swapped = (n) => {
-    const s = String(n).padStart(2, "0");
-    return Number.parseInt(s[1] + s[0], 16);
-  };
-  const timestamp = Buffer.from(
-    [
-      now.getUTCFullYear() % 100,
-      now.getUTCMonth() + 1,
-      now.getUTCDate(),
-      now.getUTCHours(),
-      now.getUTCMinutes(),
-      now.getUTCSeconds(),
-      0,
-    ].map(swapped),
-  );
-  // SMS-DELIVER, synthetic sender 40404, UCS-2, no multipart header. Encode the
-  // newline in the PDU rather than sending it as an emulator console command.
-  const pdu = Buffer.concat([
-    Buffer.from([0, 4, 5, 0x81, 0x04, 0x04, 0xf4, 0, 8]),
-    timestamp,
-    Buffer.from([body.length]),
-    body,
+  // Let the official emulator construct its radio PDU. Its console accepts
+  // escaped newlines; a literal newline would split the console command.
+  const sent = command([
+    "emu",
+    "sms",
+    "send",
+    "40404",
+    "Your OTP is 515253.\\n@example.test #515253",
   ]);
-  const sent = command(["emu", "sms", "pdu", pdu.toString("hex")]);
   if (!/OK/.test(sent))
-    throw Error("Emulator radio rejected the synthetic SMS PDU");
+    throw Error("Emulator radio rejected the synthetic SMS");
   test(
     "incomingOriginBoundOtpIsPersistedAndCopiedOffline",
     undefined,

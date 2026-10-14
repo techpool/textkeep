@@ -1,4 +1,5 @@
 import Provider, {
+  errors,
   type Configuration,
   type AdapterPayload,
 } from "oidc-provider";
@@ -153,7 +154,20 @@ export function oauth(c: Config, db: pg.Pool, vault: Vault) {
   const provider = new Provider(`${c.origin}/oauth`, configuration);
   provider.proxy = true;
   provider.on("server_error", () => {});
+  const details: Provider["interactionDetails"] = async (req, res) => {
+    try {
+      return await provider.interactionDetails(req, res);
+    } catch (error) {
+      if (error instanceof errors.SessionNotFound)
+        throw new HttpError(
+          400,
+          "This authorization request has expired. Restart the connection from your MCP client.",
+        );
+      throw error;
+    }
+  };
   return {
+    details,
     provider,
     async identity(token: string): Promise<Identity> {
       const at = await provider.AccessToken.find(token);
@@ -186,8 +200,8 @@ export function oauth(c: Config, db: pg.Pool, vault: Vault) {
       i: Identity,
       allowSensitive: boolean,
     ) {
-      const details = await provider.interactionDetails(req, res);
-      const { uid, prompt, params, session } = details;
+      const interaction = await details(req, res);
+      const { uid, prompt, params, session } = interaction;
       if (prompt.name === "login") {
         return await provider.interactionResult(
           req,
@@ -209,6 +223,8 @@ export function oauth(c: Config, db: pg.Pool, vault: Vault) {
         `${c.origin}/mcp`,
         allowSensitive ? "messages:read messages:sensitive" : "messages:read",
       );
+      if (!allowSensitive)
+        grant.rejectResourceScope(`${c.origin}/mcp`, "messages:sensitive");
       await grant.save();
       return await provider.interactionResult(
         req,

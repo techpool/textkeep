@@ -598,6 +598,7 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
     [confirm, setConfirm] = useState(""),
     [token, setToken] = useState(""),
     [sensitive, setSensitive] = useState(false),
+    [tokenSensitive, setTokenSensitive] = useState(false),
     [interaction, setInteraction] = useState<any>(null);
   const interactionId = new URLSearchParams(location.search).get("interaction");
   const clearPrivateState = () => {
@@ -613,6 +614,7 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
     setPurge(null);
     setToken("");
     setSensitive(false);
+    setTokenSensitive(false);
     setInteraction(null);
   };
   const run = async (fn: () => Promise<void>) => {
@@ -991,6 +993,14 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                     sending, deletion or account administration is available
                     through MCP.
                   </Typography>
+                  {!user.recent && (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      Sign in with Google again before confirming this client's
+                      access. Authorization requests expire after ten minutes;
+                      restart the connection from your MCP client if this page
+                      has expired.
+                    </Alert>
+                  )}
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -1002,19 +1012,15 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                   />
                   <Button
                     variant="contained"
+                    disabled={busy || !user.recent}
                     onClick={() =>
                       void run(async () => {
-                        const res = await fetch("/app/access/consent", {
+                        const { redirectTo } = await api<{
+                          redirectTo: string;
+                        }>("/app/access/consent", {
                           method: "POST",
-                          headers: {
-                            "Content-Type": "application/json",
-                            "X-CSRF-Token": (await api("/api/v1/auth/csrf"))
-                              .token,
-                          },
                           body: JSON.stringify({ sensitive, approve: true }),
                         });
-                        if (!res.ok) throw Error("Consent failed");
-                        const { redirectTo } = await res.json();
                         const destination = new URL(
                           redirectTo,
                           window.location.origin,
@@ -1029,6 +1035,18 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                     }
                   >
                     Confirm read-only access
+                  </Button>
+                  <Button
+                    disabled={busy || !config}
+                    sx={{ ml: 1 }}
+                    onClick={() =>
+                      void run(async () => {
+                        await googleLogin(config!);
+                        await load();
+                      })
+                    }
+                  >
+                    Sign in again to continue
                   </Button>
                 </CardContent>
               </Card>
@@ -1045,8 +1063,8 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                 <FormControlLabel
                   control={
                     <Checkbox
-                      checked={sensitive}
-                      onChange={(e) => setSensitive(e.target.checked)}
+                      checked={tokenSensitive}
+                      onChange={(e) => setTokenSensitive(e.target.checked)}
                     />
                   }
                   label="Allow sensitive messages for this token"
@@ -1059,7 +1077,7 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                         method: "POST",
                         body: JSON.stringify({
                           name: "Local MCP client",
-                          sensitive,
+                          sensitive: tokenSensitive,
                           days: 7,
                         }),
                       });

@@ -14,13 +14,15 @@ services:
       FIREBASE_WEB_CONFIG: ${FIREBASE_WEB_CONFIG}
       GOOGLE_APPLICATION_CREDENTIALS: /run/textkeep/firebase-admin.json
       ALLOWED_GOOGLE_EMAILS: ${ALLOWED_GOOGLE_EMAILS}
+      REGISTRATION_MODE: ${REGISTRATION_MODE:-allowlist}
       OWNER_FIREBASE_UID: ${OWNER_FIREBASE_UID:-}
+      OWNER_GOOGLE_EMAIL: ${OWNER_GOOGLE_EMAIL:-}
       MESSAGE_ENCRYPTION_KEYRING: ${MESSAGE_ENCRYPTION_KEYRING}
       ACTIVE_MESSAGE_KEY_ID: ${ACTIVE_MESSAGE_KEY_ID:-v1}
       LOOKUP_HMAC_KEY: ${LOOKUP_HMAC_KEY}
       OAUTH_JWKS: ${OAUTH_JWKS}
-      APK_PATH: /run/textkeep/textkeep.apk
-      RELEASE_METADATA_PATH: /run/textkeep/release.json
+      APK_PATH: ${APK_PATH:-/run/textkeep/textkeep.apk}
+      RELEASE_METADATA_PATH: ${RELEASE_METADATA_PATH:-/run/textkeep/release.json}
     volumes:
       - /data/textkeep/private:/run/textkeep:ro
     networks: [database]
@@ -29,7 +31,13 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3

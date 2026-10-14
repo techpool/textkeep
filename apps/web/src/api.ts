@@ -11,7 +11,7 @@ export async function api<T = any>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  if (options.method && options.method !== "GET" && !csrf) {
+  if (options.method && options.method !== "GET") {
     const response = await fetch("/api/v1/auth/csrf", {
       credentials: "same-origin",
     });
@@ -21,7 +21,9 @@ export async function api<T = any>(
     credentials: "same-origin",
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(options.body !== undefined
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...(csrf ? { "X-CSRF-Token": csrf } : {}),
       ...options.headers,
     },

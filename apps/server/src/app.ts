@@ -130,7 +130,9 @@ export async function buildApp(c: Config, db: pg.Pool) {
     registration: c.registrationMode,
   }));
   app.get("/api/v1/auth/csrf", async (req, reply) => {
-    const token = randomBytes(32).toString("base64url");
+    const token = /^[A-Za-z0-9_-]{43}$/.test(req.cookies.csrf || "")
+      ? req.cookies.csrf!
+      : randomBytes(32).toString("base64url");
     reply.setCookie("csrf", token, {
       secure: c.production,
       httpOnly: true,
@@ -364,7 +366,7 @@ export async function buildApp(c: Config, db: pg.Pool) {
   );
   app.get("/app/access/interaction", async (req, reply) => {
     await owner(req);
-    const d = await oa.provider.interactionDetails(req.raw, reply.raw);
+    const d = await oa.details(req.raw, reply.raw);
     const client = await oa.provider.Client.find(String(d.params.client_id));
     return {
       client: client?.clientName || d.params.client_id,
@@ -467,7 +469,10 @@ export async function buildApp(c: Config, db: pg.Pool) {
       return reply.code(404).send({ error: "Release not available" });
     reply
       .header("Content-Type", "application/vnd.android.package-archive")
-      .header("Content-Disposition", 'attachment; filename="textkeep.apk"');
+      .header(
+        "Content-Disposition",
+        `attachment; filename="textkeep-${(c.releaseMetadata as { version: string }).version}.apk"`,
+      );
     return reply.send(createReadStream(c.apkPath));
   });
   const web = resolve(process.cwd(), "apps/web/dist");
