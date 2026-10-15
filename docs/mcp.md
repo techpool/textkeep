@@ -29,6 +29,8 @@ Verification includes a local HTTP authorization/consent flow with only the Goog
 
 Consent requires Google authentication within the last five minutes. If asked to sign in again, use the button beside the consent action. An expired authorization request must be restarted from the MCP client. A browser login can remain valid longer than the confirmation window. OAuth and personal-token sensitive-access choices are independent; declining the sensitive scope issues a narrower token without repeating consent.
 
+Clients that register the `refresh_token` grant can renew consented MCP access even when their authorization request contains only the SMS API scopes. OIDC `offline_access` is not required for this resource-scoped OAuth flow. Tokens rotate, remain scoped to the consented client/resource and do not depend on the browser session remaining alive. Connections created before this correction need one reconnection because their original authorization returned no refresh token. Expired/revoked refresh tokens still require reauthorization.
+
 The live deployment was verified with an actual Google-owner OAuth session, mandatory S256 PKCE, the official remote SDK, five read-only tool annotations, sync status, refresh rotation, reuse-triggered grant revocation and access denial afterward. This does not assert compatibility with every client or physical phone scenario.
 
 The tester confirmed a successful ChatGPT remote connection after the consent continuation and CSRF fixes were deployed. This establishes its Google login and consent handoff; The connected TextKeep integration subsequently invoked `get_sync_status` successfully, including a valid last-sync timestamp. Message-reading tool calls and the separate sensitive-scope choice were not exercised.

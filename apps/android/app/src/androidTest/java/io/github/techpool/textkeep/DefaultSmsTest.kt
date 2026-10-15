@@ -41,7 +41,7 @@ class DefaultSmsTest {
             ui.wait(Until.hasObject(By.text("Set as default")), 15000)
             val controller = ui.currentPackageName
             check(controller?.endsWith("permissioncontroller") == true) { "Expected the real Android role controller" }
-            ui.pressBack()
+            click("Cancel")
             ui.wait(Until.hasObject(By.text("Choose default SMS app")), 15000)
             assertFalse("Cancelling the role prompt must not grant the SMS role", TelephonyCore.isDefault(context))
             click("Choose default SMS app")

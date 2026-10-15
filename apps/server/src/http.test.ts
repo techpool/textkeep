@@ -6,7 +6,7 @@ import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
 import { generateKeyPair, exportJWK } from "jose";
 import { buildApp } from "./app.js";
 import { migrate } from "./database.js";
-import { secretHash } from "./crypto.js";
+import { secretHash, Vault } from "./crypto.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 const url = process.env.TEST_DATABASE_URL;
@@ -305,7 +305,7 @@ test(
       const grantParams = new URLSearchParams({
         ...Object.fromEntries(params),
         resource: origin + "/mcp",
-        scope: "openid offline_access messages:read messages:sensitive",
+        scope: "messages:read messages:sensitive",
         state,
         prompt: "consent",
         code_challenge: createHash("sha256")
@@ -382,6 +382,33 @@ test(
         "Declining sensitive access must reduce scope without repeating consent",
       );
       assert.ok(issued.refresh_token);
+      assert.ok(!issued.scope.split(" ").includes("offline_access"));
+      const refreshRow = (
+        await db.query(
+          "SELECT id,payload FROM textkeep.oauth_objects WHERE model='RefreshToken' AND id=$1",
+          [secretHash(issued.refresh_token)],
+        )
+      ).rows[0];
+      assert.ok(refreshRow);
+      const tokenVault = new Vault({
+        keyring: { v1: Buffer.alloc(32, 1).toString("base64") },
+        activeKey: "v1",
+        lookupKey: Buffer.alloc(32, 2).toString("base64"),
+      });
+      const refreshPayload = tokenVault.open<{
+        expiresWithSession?: boolean;
+        sessionUid: string;
+      }>(refreshRow.payload, `oauth:RefreshToken:${refreshRow.id}`);
+      // The library omits this property when its session-binding policy is false.
+      assert.equal(Boolean(refreshPayload.expiresWithSession), false);
+      assert.equal(typeof refreshPayload.sessionUid, "string");
+      const removedSession = await db.query(
+        "DELETE FROM textkeep.oauth_objects WHERE model='Session' AND uid=$1",
+        [refreshPayload.sessionUid],
+      );
+      assert.equal(removedSession.rowCount, 1);
+      // The SDK call and refresh exchange below must still work with that
+      // synthetic browser authorization session genuinely removed.
       const authorized = new Client({ name: "oauth-http-test", version: "1" });
       await authorized.connect(
         new StreamableHTTPClientTransport(new URL(origin + "/mcp"), {

@@ -993,6 +993,11 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                     sending, deletion or account administration is available
                     through MCP.
                   </Typography>
+                  <Typography color="text.secondary" sx={{ mb: 2 }}>
+                    Access tokens last ten minutes. This client may renew its
+                    authorized access using rotating refresh tokens. Revoke the
+                    connection below whenever you want to end access.
+                  </Typography>
                   {!user.recent && (
                     <Alert severity="info" sx={{ mb: 2 }}>
                       Sign in with Google again before confirming this client's

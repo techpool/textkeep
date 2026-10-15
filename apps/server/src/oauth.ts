@@ -104,6 +104,17 @@ export function oauth(c: Config, db: pg.Pool, vault: Vault) {
     scopes: ["openid", "offline_access"],
     responseTypes: ["code"],
     pkce: { required: () => true },
+    // MCP clients may request only API scopes, without OIDC offline_access.
+    // Refresh remains bound to the explicitly consented resource and client.
+    issueRefreshToken: async (_ctx, client, source) =>
+      client.grantTypeAllowed("refresh_token") &&
+      (source.scopes.has("offline_access") ||
+        source.resourceIndicators.has(`${c.origin}/mcp`)),
+    expiresWithSession: async (_ctx, source) =>
+      !(
+        source.scopes.has("offline_access") ||
+        source.resourceIndicators.has(`${c.origin}/mcp`)
+      ),
     rotateRefreshToken: () => true,
     ttl: {
       AccessToken: 600,
