@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import { rateLimitAddress } from "./network.js";
 import staticPlugin from "@fastify/static";
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
@@ -48,7 +49,8 @@ export async function buildApp(c: Config, db: pg.Pool) {
     },
     disableRequestLogging: true,
     bodyLimit: 600000,
-    trustProxy: "127.0.0.1",
+    trustProxy:
+      c.trustedProxyCidrs || (c.production ? [] : ["127.0.0.1/32", "::1/128"]),
   }).withTypeProvider<ZodTypeProvider>();
   const vault = new Vault(c);
   const auth = new Auth(c, db, vault);
@@ -78,7 +80,14 @@ export async function buildApp(c: Config, db: pg.Pool) {
     },
   });
   await app.register(cors, { origin: c.origin, credentials: true });
-  await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
+  await app.register(rateLimit, {
+    max: 120,
+    timeWindow: "1 minute",
+    keyGenerator: rateLimitAddress(
+      c.trustedProxyCidrs || (c.production ? [] : ["127.0.0.1/32", "::1/128"]),
+      c.cloudflareProxyCidrs || [],
+    ),
+  });
   await app.register(swagger, {
     openapi: { info: { title: "TextKeep API", version: "1.0.0" } },
     transform: jsonSchemaTransform,

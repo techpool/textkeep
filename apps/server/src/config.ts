@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { existsSync, statSync, readFileSync } from "node:fs";
+import { proxyRanges } from "./network.js";
 export interface Config {
   production: boolean;
   origin: string;
@@ -18,6 +19,8 @@ export interface Config {
   port: number;
   apkPath?: string;
   releaseMetadata?: object;
+  trustedProxyCidrs?: string[];
+  cloudflareProxyCidrs?: string[];
 }
 export function config(env: NodeJS.ProcessEnv = process.env): Config {
   const required = (name: string) => {
@@ -26,6 +29,14 @@ export function config(env: NodeJS.ProcessEnv = process.env): Config {
     return value;
   };
   const production = env.APP_ENV === "production";
+  const trustedProxyCidrs = proxyRanges(
+    env.TRUSTED_PROXY_CIDRS || (production ? "" : "127.0.0.1/32,::1/128"),
+  );
+  const cloudflareProxyCidrs = proxyRanges(env.CLOUDFLARE_PROXY_CIDRS || "");
+  if (cloudflareProxyCidrs.length && !trustedProxyCidrs.length)
+    throw Error(
+      "Cloudflare forwarding requires an explicit trusted origin proxy",
+    );
   const origin = required("PUBLIC_BASE_URL").replace(/\/$/, "");
   const keyring = JSON.parse(required("MESSAGE_ENCRYPTION_KEYRING")) as Record<
     string,
@@ -95,6 +106,8 @@ export function config(env: NodeJS.ProcessEnv = process.env): Config {
   }
   return {
     production,
+    trustedProxyCidrs,
+    cloudflareProxyCidrs,
     origin,
     databaseUrl: required("DATABASE_URL"),
     firebaseProject: required("FIREBASE_PROJECT_ID"),

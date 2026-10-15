@@ -74,6 +74,11 @@ test("production fails closed for missing allowlist, emulator, insecure origin a
     { FIREBASE_AUTH_EMULATOR_HOST: "localhost:9099" },
     { DEBUG_AUTH: "1" },
     { CORS_ORIGIN: "*" },
+    { TRUSTED_PROXY_CIDRS: "*" },
+    { TRUSTED_PROXY_CIDRS: "0.0.0.0/0" },
+    { TRUSTED_PROXY_CIDRS: "::/0" },
+    { TRUSTED_PROXY_CIDRS: "10.0.0.1/99" },
+    { CLOUDFLARE_PROXY_CIDRS: "192.0.2.0/24" },
   ])
     assert.throws(() => config({ ...env, ...patch }));
 });

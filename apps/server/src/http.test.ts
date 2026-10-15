@@ -27,6 +27,8 @@ test(
     const app = await buildApp(
       {
         production: false,
+        trustedProxyCidrs: ["127.0.0.1/32", "10.0.0.2/32"],
+        cloudflareProxyCidrs: ["192.0.2.0/24"],
         origin,
         databaseUrl: url!,
         firebaseProject: "synthetic-auth",
@@ -43,6 +45,55 @@ test(
     );
     await app.listen({ host: "127.0.0.1", port: 55439 });
     try {
+      const proxied = (client: string) =>
+        app.inject({
+          method: "GET",
+          url: "/health/live",
+          remoteAddress: "10.0.0.2",
+          headers: {
+            "x-forwarded-for": "192.0.2.5",
+            "cf-connecting-ip": client,
+          },
+        });
+      for (let n = 0; n < 120; n++)
+        assert.equal((await proxied("198.51.100.1")).statusCode, 200);
+      assert.equal((await proxied("198.51.100.1")).statusCode, 429);
+      assert.equal(
+        (await proxied("198.51.100.2")).statusCode,
+        200,
+        "Other users must not share the edge rate bucket",
+      );
+      for (let n = 0; n < 121; n++) {
+        const spoof = await app.inject({
+          method: "GET",
+          url: "/health/live",
+          remoteAddress: "203.0.113.9",
+          headers: {
+            "x-forwarded-for": "192.0.2.5",
+            "cf-connecting-ip": `198.51.100.${n + 1}`,
+          },
+        });
+        assert.equal(
+          spoof.statusCode,
+          n < 120 ? 200 : 429,
+          "Untrusted peers cannot rotate their rate bucket using forwarded headers",
+        );
+      }
+      assert.equal(
+        (
+          await app.inject({
+            method: "GET",
+            url: "/health/live",
+            remoteAddress: "10.0.0.2",
+            headers: {
+              "x-forwarded-for": "192.0.2.5, 203.0.113.9",
+              "cf-connecting-ip": "198.51.100.3",
+            },
+          })
+        ).statusCode,
+        429,
+        "An untrusted nearest hop cannot impersonate a Cloudflare edge earlier in the chain",
+      );
       for (const path of [
         "/health/live",
         "/health/ready",

@@ -10,6 +10,12 @@ Use a PostgreSQL instance you already operate. Inspect its container, private de
 6. Build `deployment/Dockerfile` and deploy `deployment/compose.production.yaml`. Set `DATABASE_NETWORK` to the verified external private network and prepare a protected host directory containing `firebase-admin.json`, optional `textkeep.apk`, and matching `release.json`. Give only the runtime container user read access. Configure HTTPS for the app's port 3000. Ensure proxy logs do not capture query strings or request bodies for sensitive routes.
 7. Verify health/readiness, database connectivity from the app container, auth denials, Google login, OAuth discovery/consent and signed downloads. Run `node scripts/smoke.mjs https://your-host.example`.
 
+## Reverse proxy and rate limits
+
+Set `TRUSTED_PROXY_CIDRS` to the verified immediate reverse proxy IPs/CIDRs on the application's private networks. Production defaults to trusting no proxy; development trusts loopback. Do not use a wildcard or a zero-prefix network. Recheck these pins if the proxy's container/network addresses change.
+
+If that proxy receives traffic through Cloudflare, separately set `CLOUDFLARE_PROXY_CIDRS` using Cloudflare's current [official IPv4](https://www.cloudflare.com/ips-v4) and [IPv6](https://www.cloudflare.com/ips-v6) ranges. The rate limiter uses `CF-Connecting-IP` only when the socket peer is the configured origin proxy and the nearest forwarded hop is a configured Cloudflare edge. Direct traffic and untrusted forwarded chains cannot choose their rate bucket through this header. Keep Cloudflare edge ranges out of `TRUSTED_PROXY_CIDRS` so that the edge remains the first untrusted hop used for this check.
+
 ## Android build inputs
 
 Provide `TEXTKEEP_SERVER`, `FIREBASE_ANDROID_APP_ID`, `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID` and `GOOGLE_CLIENT_ID` as environment variables or ignored Gradle properties. Build each variant with its matching Firebase app ID. These client values are intentionally present in the configured APK; they are not database/admin credentials.
