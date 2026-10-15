@@ -34,6 +34,7 @@ object TelephonyCore {
     file.delete();continue
    }
    dao.receipt(Receipt(id,LocalCrypto.encrypt(event.toString()),receivedAt=event.getLong("receivedAt")))
+   PersistenceCheckpoint.reached(c,"receipt-stored",id)
    var receipt=dao.receiptById(id)?:continue
    if(receipt.providerId==0L) {
     // Recover an insert whose acknowledgement was interrupted. Match conservatively and never deduplicate imported rows by body.
@@ -42,14 +43,17 @@ object TelephonyCore {
     if(providerId==0L) {
      val values=ContentValues().apply {put("address",event.getString("address"));put("body",event.getString("body"));put("date",event.getLong("date"));put("date_sent",event.optLong("dateSent",event.getLong("date")));put("thread_id",Telephony.Threads.getOrCreateThreadId(c,event.getString("address")));put("read",0);put("seen",0);put("sub_id",event.optInt("subscriptionId",-1))}
      providerId=ContentUris.parseId(c.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI,values)?:throw IllegalStateException("SMS provider rejected receipt"))
+     PersistenceCheckpoint.reached(c,"provider-inserted",id)
     }
     receipt=receipt.copy(providerId=providerId);dao.update(receipt)
+    PersistenceCheckpoint.reached(c,"provider-linked",id)
    }
    if(!receipt.notified) {
     // Mark before posting: a crash may omit an alert, but cannot repeatedly alert for a recovered OTP.
     dao.update(receipt.copy(notified=true));Notifications.incoming(c,id,event)
    }
    file.delete()
+   PersistenceCheckpoint.reached(c,"journal-removed",id)
   }
  }
  fun send(c:Context,address:String,body:String,sub:Int=-1):Long {

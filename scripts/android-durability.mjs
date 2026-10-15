@@ -23,7 +23,7 @@ if (
 console.log("Runtime Android API", runtimeApi);
 const target = "io.github.techpool.textkeep.debug";
 const suite = "io.github.techpool.textkeep.DurabilityTest";
-function test(method, stage, className = suite) {
+function instrumentArguments(method, stage, className = suite, extras = {}) {
   const args = [
     "shell",
     "am",
@@ -35,7 +35,12 @@ function test(method, stage, className = suite) {
     className + "#" + method,
   ];
   if (stage) args.push("-e", "durabilityStage", stage);
+  for (const [key, value] of Object.entries(extras)) args.push("-e", key, value);
   args.push(target + ".test/androidx.test.runner.AndroidJUnitRunner");
+  return args;
+}
+function test(method, stage, className = suite, extras = {}) {
+  const args = instrumentArguments(method, stage, className, extras);
   const output = command(args);
   if (
     !/OK \(1 test\)/.test(output) ||
@@ -45,6 +50,23 @@ function test(method, stage, className = suite) {
     throw Error("Instrumentation failed: " + method);
   }
   console.log("PASS", method);
+}
+function fault(point) {
+  const className = "io.github.techpool.textkeep.FaultRecoveryTest";
+  const extras = { faultPoint: point };
+  test("prepareFault", undefined, className, extras);
+  let output;
+  try {
+    output = command(instrumentArguments("terminateInsidePersistence", undefined, className, extras));
+  } catch (error) {
+    if (error.status == null) throw error;
+    output = String(error.stdout || "") + String(error.stderr || "");
+  }
+  if (/OK \(1 test\)/.test(output)) throw Error("Fault did not terminate instrumentation: " + point);
+  // A crash-shaped command result alone is insufficient: this next process
+  // must verify the durable checkpoint marker, different PID and recovered data.
+  test("verifyAfterTermination", undefined, className, extras);
+  console.log("PASS active process-termination recovery", point);
 }
 async function radioTest() {
   const method = "incomingOriginBoundOtpIsPersistedAndCopiedOffline";
@@ -133,6 +155,7 @@ if (process.argv.includes("--sms")) {
   test("prepareProviderInsertForRestart", "provider-prepare");
   command(["shell", "am", "force-stop", target]);
   test("verifyProviderInsertAfterRestart", "provider-verify");
+  for (const point of ["journal-committed", "receipt-stored", "provider-inserted", "provider-linked", "journal-removed", "source-stored", "ack-before", "ack-after"]) fault(point);
 }
 console.log(
   "PASS: encrypted journal and bound pending outbox survived process restarts, interrupted AtomicFile replacement retained, revision acknowledgement preserved, and synthetic MMS codec verified. Carrier transport and locked/Direct Boot behavior are separate gates.",

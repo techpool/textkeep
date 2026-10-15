@@ -50,6 +50,7 @@ object LocalCrypto {
   val public=KeysetHandle.readNoSecret(BinaryKeysetReader.withBytes(AtomicFile(File(dp.filesDir,"receipt-public-v1.keyset")).readFully())).getPrimitive(HybridEncrypt::class.java)
   val ciphertext=public.encrypt(value.toString().toByteArray(),id.toByteArray())
   val out=target.startWrite();try{out.write(JSONObject().put("version",1).put("ciphertext",b64(ciphertext)).toString().toByteArray());target.finishWrite(out)}catch(e:Exception){target.failWrite(out);throw e}
+  PersistenceCheckpoint.reached(c,"journal-committed",id)
  }
  fun readJournal(c:Context):Sequence<Pair<File,JSONObject>> {
   check(TelephonyCore.unlocked(c)){"Private receipt keyset is credential protected"};HybridConfig.register()

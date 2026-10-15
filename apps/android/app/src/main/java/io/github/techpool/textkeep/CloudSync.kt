@@ -86,7 +86,7 @@ class ReconcileWorker(c:Context,p:WorkerParameters):CoroutineWorker(c,p){compani
     val id=rows.getLong(0)
     val j=JSONObject().put("providerId",id.toString()).put("epoch",epoch).put("address",str(1)).put("body",str(2)).put("date",rows.getLong(3)).put("dateSent",rows.getLong(4)).put("type",rows.getInt(5)).put("read",rows.getInt(6)!=0).put("seen",rows.getInt(7)!=0).put("threadId",str(8)).put("subscriptionId",rows.getInt(9)).put("deliveryStatus",rows.getInt(10)).put("otp",OtpParser.parse(str(2))?:JSONObject.NULL).put("parserVersion",OtpParser.VERSION)
     val digest=LocalCrypto.hash(j.toString().toByteArray());val old=dao.source(epoch,id)
-    if(old==null||old.digest!=digest){val rev=(old?.revision?:0)+1;j.put("revision",rev);dao.source(Source(epoch,id,digest,rev,LocalCrypto.encrypt(j.toString()),old?.uploadedRevision?:0,binding=binding))}
+    if(old==null||old.digest!=digest){val rev=(old?.revision?:0)+1;j.put("revision",rev);DurableSources.store(c,dao,Source(epoch,id,digest,rev,LocalCrypto.encrypt(j.toString()),old?.uploadedRevision?:0,binding=binding))}
   }
   val newCursor=dao.state("newCursor")?.toLongOrNull()?:0L
   c.contentResolver.query(Telephony.Sms.CONTENT_URI,columns,"_id>?",arrayOf(newCursor.toString()),"_id DESC LIMIT 200")?.use{rows->while(rows.moveToNext())capture(rows)}
@@ -112,7 +112,7 @@ class UploadWorker(c:Context,p:WorkerParameters):CoroutineWorker(c,p){override s
    val array=JSONArray();var bytes=0;val selected=records.takeWhile{val size=LocalCrypto.decrypt(it.encrypted).toByteArray().size;bytes+=size;bytes<=500_000};selected.forEach{array.put(JSONObject(LocalCrypto.decrypt(it.encrypted)))}
    if(selected.isEmpty())return Result.failure()
    val r=CloudIdentity.request(c,"/api/v1/sync/batches","POST",JSONObject().put("deviceId",device).put("batchId",UUID.randomUUID().toString()).put("records",array),true)
-   val a=r.getJSONArray("acknowledgements");for(i in 0 until a.length()){val ack=a.getJSONObject(i);val id=ack.optString("providerId").toLongOrNull()?:continue;val row=selected.find{it.providerId==id}?:continue;val error=if(ack.optString("status") in listOf("committed","suppressed","stale"))null else ack.optString("error","Record rejected");dao.acknowledge(row.epoch,id,row.revision,error)}
+   val a=r.getJSONArray("acknowledgements");for(i in 0 until a.length()){val ack=a.getJSONObject(i);val id=ack.optString("providerId").toLongOrNull()?:continue;val row=selected.find{it.providerId==id}?:continue;val error=if(ack.optString("status") in listOf("committed","suppressed","stale"))null else ack.optString("error","Record rejected");DurableSources.acknowledge(c,dao,row,error)}
    dao.state(State("lastUpload",System.currentTimeMillis().toString()));dao.state(State("syncError",""))
   };return Result.retry()
  }catch(e:Exception){dao.state(State("syncError",e.message?:"Upload failed"));return Result.retry()}
