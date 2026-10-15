@@ -129,7 +129,7 @@ class DurabilityTest {
         assertTrue(stage.edit().putString("outbox", fixture.toString()).commit())
     }
 
-    @Test fun sourceCaptureUsesThePersistedDeviceRegistration() = runBlocking {
+    @Test fun sourceCaptureUsesThePersistedDeviceRegistration(): Unit = runBlocking {
         val name = "synthetic-binding-${UUID.randomUUID()}.db"
         val epoch = UUID.randomUUID().toString()
         val payload = JSONObject().put("body", body)
