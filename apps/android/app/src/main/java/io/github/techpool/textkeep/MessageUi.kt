@@ -148,8 +148,8 @@ private fun messageDate(time: Long): String {
                                 Regex("\\[part ([0-9]+)\\]").findAll(entry.body).forEach { part -> TextButton(onClick = { onOpenPart(part.groupValues[1].toLong()) }) { Icon(Icons.Outlined.Attachment, null); Spacer(Modifier.width(6.dp)); Text("Open attachment") } }
                                 if(entry.location.isNotBlank()) TextButton(onClick = { onDownload(entry) }) { Text("Download MMS") }
                             }
-                            if(entry.carrierFailed || (!entry.mms && entry.type == 5)) TextButton(onClick = { onRetry(entry) }) { Icon(Icons.Outlined.Refresh, null, Modifier.size(18.dp)); Text("Retry sending") }
-                            if(entry.type == 3) TextButton(onClick = { onEdit(entry) }) { Text("Edit draft") }
+                            if((entry.mms && entry.type == 4 && entry.carrierFailed) || (!entry.mms && entry.type == 5)) TextButton(onClick = { onRetry(entry) }) { Icon(Icons.Outlined.Refresh, null, Modifier.size(18.dp)); Text("Retry sending") }
+                            if(!entry.mms && entry.type == 3) TextButton(onClick = { onEdit(entry) }) { Text("Edit draft") }
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -166,9 +166,9 @@ private fun messageDate(time: Long): String {
         }
         Surface(tonalElevation = 2.dp) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                IconButton(onClick = onComposeOptions) { Icon(Icons.Outlined.Add, "More compose options") }
+                IconButton(onClick = onComposeOptions, enabled = !busy) { Icon(Icons.Outlined.Add, "More compose options") }
                 OutlinedTextField(reply, onReplyChange, Modifier.weight(1f), placeholder = { Text("Message") }, maxLines = 5,
-                    shape = RoundedCornerShape(26.dp), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
+                    enabled = !busy, shape = RoundedCornerShape(26.dp), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
                 FilledIconButton(onClick = onSend, enabled = !busy && reply.isNotBlank(), modifier = Modifier.size(48.dp)) { Icon(Icons.AutoMirrored.Outlined.Send, "Send reply") }
             }
         }
@@ -177,16 +177,16 @@ private fun messageDate(time: Long): String {
 
 @Composable fun ComposeScreen(recipient: String, onRecipient: (String) -> Unit, body: String, onBody: (String) -> Unit, sub: String, onSub: (String) -> Unit, sims: List<Pair<String,String>>, attached: Boolean, onAttach: () -> Unit, onRemoveAttachment: () -> Unit, busy: Boolean, onSend: () -> Unit, onSave: () -> Unit) {
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        OutlinedTextField(recipient, onRecipient, Modifier.fillMaxWidth(), label = { Text("To") }, placeholder = { Text("Phone number") }, leadingIcon = { Icon(Icons.Outlined.PersonOutline, null) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
-        OutlinedTextField(body, onBody, Modifier.fillMaxWidth(), label = { Text("Message") }, placeholder = { Text("Say something…") }, minLines = 6, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
+        OutlinedTextField(recipient, onRecipient, Modifier.fillMaxWidth(), enabled = !busy, label = { Text("To") }, placeholder = { Text("Phone number") }, leadingIcon = { Icon(Icons.Outlined.PersonOutline, null) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+        OutlinedTextField(body, onBody, Modifier.fillMaxWidth(), enabled = !busy, label = { Text("Message") }, placeholder = { Text("Say something…") }, minLines = 6, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onAttach) { Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(if(attached) "Change image" else "Add image") }
-            if(attached) IconButton(onClick = onRemoveAttachment) { Icon(Icons.Outlined.Close, "Remove attached image") }
+            TextButton(onClick = onAttach, enabled = !busy) { Icon(Icons.Outlined.AddPhotoAlternate, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(if(attached) "Change image" else "Add image") }
+            if(attached) IconButton(onClick = onRemoveAttachment, enabled = !busy) { Icon(Icons.Outlined.Close, "Remove attached image") }
         }
         if(attached) Text("Image attached · sends as carrier MMS", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         Text("Send from", style = MaterialTheme.typography.titleSmall)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            (listOf("-1" to "System default") + sims).forEach { (id, name) -> FilterChip(sub == id, { onSub(id) }, label = { Text(name) }, leadingIcon = { Icon(Icons.Outlined.SimCard, null, Modifier.size(16.dp)) }) }
+            (listOf("-1" to "System default") + sims).forEach { (id, name) -> FilterChip(sub == id, { onSub(id) }, enabled = !busy, label = { Text(name) }, leadingIcon = { Icon(Icons.Outlined.SimCard, null, Modifier.size(16.dp)) }) }
         }
         if(sims.isEmpty()) Text("Use Settings → Messaging permissions to enable SIM selection.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
