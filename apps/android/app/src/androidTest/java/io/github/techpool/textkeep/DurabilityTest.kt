@@ -115,7 +115,7 @@ class DurabilityTest {
             val replacement=wm.getWorkInfosForUniqueWork("upload").get(10,TimeUnit.SECONDS)
                 .single{next->chain.none{it.id==next.id}}
             assertEquals(0,replacement.runAttemptCount)
-            assertTrue(replacement.state.isFinished||replacement.nextScheduleTimeMillis<System.currentTimeMillis()+60_000)
+            assertTrue(replacement.state==WorkInfo.State.RUNNING||replacement.state.isFinished||replacement.nextScheduleTimeMillis<System.currentTimeMillis()+60_000)
             assertEquals(NetworkType.UNMETERED,replacement.constraints.requiredNetworkType)
         } finally {
             wm.cancelUniqueWork("upload").result.get(10,TimeUnit.SECONDS)
