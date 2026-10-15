@@ -150,6 +150,7 @@ test("preparePendingOutboxForRestart", "outbox-prepare");
 command(["shell", "am", "force-stop", target]);
 test("verifyPendingOutboxAfterRestart", "outbox-verify");
 test("acknowledgementCannotEraseAnEditMadeDuringUpload");
+test("sourceCaptureUsesThePersistedDeviceRegistration");
 test("mmsTextPduPreservesUnicodeAndHeaders");
 test("firebaseAuthKeepsApplicationContextAndSealsPreferences");
 if (process.argv.includes("--sms")) {

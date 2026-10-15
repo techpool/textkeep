@@ -18,12 +18,17 @@ import kotlinx.coroutines.flow.Flow
  @Query("SELECT * FROM sources WHERE uploadedRevision < revision AND binding=:binding AND error IS NULL ORDER BY providerId DESC LIMIT 100") suspend fun pending(binding:String):List<Source>
  @Query("SELECT count(*) FROM sources WHERE uploadedRevision < revision") fun pendingCount():Flow<Int>
  @Query("SELECT count(*) FROM sources WHERE error IS NOT NULL") fun failedCount():Flow<Int>
- @Query("UPDATE sources SET uploadedRevision=CASE WHEN :error IS NULL THEN :revision ELSE uploadedRevision END,error=:error WHERE epoch=:epoch AND providerId=:id AND revision=:revision") suspend fun acknowledge(epoch:String,id:Long,revision:Long,error:String?)
+ @Query("UPDATE sources SET uploadedRevision=CASE WHEN :error IS NULL THEN :revision ELSE uploadedRevision END,error=:error WHERE epoch=:epoch AND providerId=:id AND revision=:revision AND binding=:binding") suspend fun acknowledge(epoch:String,id:Long,revision:Long,error:String?,binding:String)
  @Query("UPDATE sources SET error=NULL WHERE error IS NOT NULL") suspend fun retry()
  @Query("SELECT value FROM state WHERE `key`=:key") suspend fun state(key:String):String?
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun state(s:State)
  @Query("DELETE FROM sources") suspend fun clearSources()
- @Query("DELETE FROM state WHERE `key` IN ('deviceId','deviceToken','accountBinding','scanCursor')") suspend fun resetCloud()
+ @Query("DELETE FROM state WHERE `key` IN ('deviceId','deviceToken','accountBinding','registrationAttempt','scanCursor','newCursor','lastUpload','syncError','retryAfter') OR `key` LIKE 'retryAfter:%'") suspend fun resetCloud()
+ @Transaction suspend fun uploadStatus(binding:String,lastUpload:String?,error:String) {
+  if("${state("accountBinding")}|${state("deviceId")}"!=binding)return
+  if(lastUpload!=null)state(State("lastUpload",lastUpload))
+  state(State("syncError",error))
+ }
 }
 @Database(entities=[Receipt::class,Source::class,State::class],version=2,exportSchema=false) abstract class LocalStore:RoomDatabase() {
  abstract fun dao():LocalDao

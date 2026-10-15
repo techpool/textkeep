@@ -40,16 +40,19 @@ class FaultRecoveryTest {
         val fixture = JSONObject().put("point", point).put("id", id).put("epoch", UUID.randomUUID().toString())
             .put("database", "synthetic-active-fault-$id.db").put("date", System.currentTimeMillis() - 600_000)
             .put("body", "Synthetic historical OTP is 515253. বাংলা हिन्दी $id")
-        if (point in setOf("ack-before", "ack-after")) {
+        if (point in sourcePoints) {
             val store = Room.databaseBuilder(context, LocalStore::class.java, fixture.getString("database")).build()
-            try { DurableSources.store(context, store.dao(), source(fixture)) } finally { store.close() }
+            try {
+                store.dao().state(State("accountBinding", "https://synthetic.invalid|original-owner"))
+                store.dao().state(State("deviceId", "original-device"))
+                if (point != "source-stored") capture(store, fixture)
+            } finally { store.close() }
         }
         assertTrue(stage.edit().putString("fixture", fixture.toString()).commit())
     }
 
-    private fun source(fixture: JSONObject) = Source(fixture.getString("epoch"), 123L, "synthetic-digest", 1L,
-        LocalCrypto.encrypt(JSONObject().put("body", fixture.getString("body")).toString()),
-        binding = "https://synthetic.invalid|original-owner|original-device")
+    private suspend fun capture(store: LocalStore, fixture: JSONObject) = DurableSources.capture(context, store,
+        fixture.getString("epoch"), 123L, "synthetic-digest", JSONObject().put("body", fixture.getString("body")))
 
     /** This method must terminate the instrumentation process without returning. */
     @Test fun terminateInsidePersistence() = runBlocking {
@@ -66,7 +69,7 @@ class FaultRecoveryTest {
         } else {
             val store = Room.databaseBuilder(context, LocalStore::class.java, fixture.getString("database")).build()
             try {
-                if (point == "source-stored") DurableSources.store(context, store.dao(), source(fixture))
+                if (point == "source-stored") capture(store, fixture)
                 else DurableSources.acknowledge(context, store.dao(), store.dao().source(fixture.getString("epoch"), 123L)!!, null)
             } finally { store.close() }
         }

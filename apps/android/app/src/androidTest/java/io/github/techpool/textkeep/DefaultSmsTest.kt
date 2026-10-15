@@ -3,6 +3,7 @@ package io.github.techpool.textkeep
 import android.app.NotificationManager
 import android.app.KeyguardManager
 import android.content.ClipboardManager
+import android.content.ClipData
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
@@ -81,9 +82,16 @@ class DefaultSmsTest {
             action.actionIntent.send()
             val clipboard = context.getSystemService(ClipboardManager::class.java)
             val copyDeadline = SystemClock.elapsedRealtime() + 10000
-            while (clipboard.primaryClip?.getItemAt(0)?.text?.toString() != "515253" && SystemClock.elapsedRealtime() < copyDeadline) SystemClock.sleep(50)
-            assertEquals("515253", clipboard.primaryClip?.getItemAt(0)?.text?.toString())
-            assertTrue(clipboard.primaryClip!!.description.extras!!.getBoolean("android.content.extra.IS_SENSITIVE"))
+            var copied: ClipData? = null
+            while (SystemClock.elapsedRealtime() < copyDeadline) {
+                copied = clipboard.primaryClip
+                if (copied?.getItemAt(0)?.text?.toString() == "515253") break
+                SystemClock.sleep(50)
+            }
+            // Use the observed clip: CopyCodeActivity finishing can briefly
+            // remove window focus and deny a second ClipboardService read.
+            assertEquals("515253", copied?.getItemAt(0)?.text?.toString())
+            assertTrue(copied!!.description.extras!!.getBoolean("android.content.extra.IS_SENSITIVE"))
         }
     }
 }

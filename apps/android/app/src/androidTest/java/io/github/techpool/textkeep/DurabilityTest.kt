@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Telephony
 import android.util.AtomicFile
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.work.WorkManager
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.mms.pdu_alt.*
@@ -76,15 +77,36 @@ class DurabilityTest {
             val first = Source(epoch, 123L, "synthetic-digest", 2L, sealed, binding=binding)
             store.dao().source(first)
             store.dao().source(first.copy(revision=3L, digest="edited-synthetic-digest"))
-            store.dao().acknowledge(epoch, 123L, 2L, null)
+            store.dao().acknowledge(epoch, 123L, 2L, null, binding)
             assertEquals(3L, store.dao().pending(binding).single().revision)
             assertEquals(0L, store.dao().source(epoch, 123L)!!.uploadedRevision)
-            store.dao().acknowledge(epoch, 123L, 3L, null)
+            store.dao().acknowledge(epoch, 123L, 3L, null, binding)
             store.close()
             store = Room.databaseBuilder(context, LocalStore::class.java, name).build()
             assertEquals(3L, store.dao().source(epoch, 123L)!!.uploadedRevision)
             assertTrue(store.dao().pending(binding).isEmpty())
             assertEquals(body, JSONObject(LocalCrypto.decrypt(store.dao().source(epoch, 123L)!!.encrypted)).getString("body"))
+            // A reset can recreate the same provider identity/revision for a
+            // different destination before the old server responds.
+            val replacement = first.copy(revision=3L, binding="https://other.invalid|different-owner|different-device")
+            store.dao().source(replacement)
+            store.dao().acknowledge(epoch, 123L, 3L, null, binding)
+            store.dao().acknowledge(epoch, 123L, 3L, "Old destination rejected the record", binding)
+            assertEquals(0L, store.dao().source(epoch, 123L)!!.uploadedRevision)
+            assertNull(store.dao().source(epoch, 123L)!!.error)
+            assertEquals(1, store.dao().pending(replacement.binding).size)
+            DurableSources.acknowledge(context, store.dao(), replacement, null)
+            assertTrue(store.dao().pending(replacement.binding).isEmpty())
+            store.dao().state(State("accountBinding", "https://other.invalid|different-owner"))
+            store.dao().state(State("deviceId", "different-device"))
+            store.dao().uploadStatus(binding, "old-time", "Old destination error")
+            assertNull(store.dao().state("lastUpload"))
+            assertNull(store.dao().state("syncError"))
+            store.dao().uploadStatus(replacement.binding, "new-time", "")
+            assertEquals("new-time", store.dao().state("lastUpload"))
+            store.dao().resetCloud()
+            assertNull(store.dao().state("lastUpload"))
+            assertNull(store.dao().state("syncError"))
         } finally {
             store.close()
             context.deleteDatabase(name)
@@ -107,6 +129,37 @@ class DurabilityTest {
         assertTrue(stage.edit().putString("outbox", fixture.toString()).commit())
     }
 
+    @Test fun sourceCaptureUsesThePersistedDeviceRegistration() = runBlocking {
+        val name = "synthetic-binding-${UUID.randomUUID()}.db"
+        val epoch = UUID.randomUUID().toString()
+        val payload = JSONObject().put("body", body)
+        inStore(name) { store ->
+            val dao = store.dao()
+            dao.state(State("accountBinding", "https://synthetic.invalid|original-owner"))
+            dao.state(State("deviceId", "original-device"))
+            val first = DurableSources.capture(context, store, epoch, 456L, "digest", payload)!!
+            assertEquals("https://synthetic.invalid|original-owner|original-device", first.binding)
+            assertEquals(1L, first.revision)
+            assertNull(DurableSources.capture(context, store, epoch, 456L, "digest", payload))
+            // No Firebase user/token is consulted during local provider capture.
+            val changed = DurableSources.capture(context, store, epoch, 456L, "edited-digest", payload)!!
+            assertEquals(first.binding, changed.binding)
+            assertEquals(2L, changed.revision)
+            store.withTransaction {
+                dao.clearSources(); dao.resetCloud()
+                dao.state(State("accountBinding", "https://other.invalid|new-owner"))
+                dao.state(State("deviceId", "new-device"))
+            }
+            val replacement = DurableSources.capture(context, store, epoch, 456L, "digest", payload)!!
+            assertEquals("https://other.invalid|new-owner|new-device", replacement.binding)
+            assertEquals(1L, replacement.revision)
+            DurableSources.acknowledge(context, dao, first, null)
+            assertEquals(0L, dao.source(epoch, 456L)!!.uploadedRevision)
+            assertEquals(1, dao.pending(replacement.binding).size)
+        }
+        context.deleteDatabase(name)
+    }
+
     @Test fun verifyPendingOutboxAfterRestart() = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("durabilityStage") == "outbox-verify")
         val fixture = JSONObject(stage.getString("outbox", null) ?: error("Prepare the synthetic outbox first"))
@@ -118,7 +171,7 @@ class DurabilityTest {
                 val row = store.dao().pending(binding).single()
                 assertEquals(body, JSONObject(LocalCrypto.decrypt(row.encrypted)).getString("body"))
                 assertTrue(store.dao().pending("https://synthetic.invalid|other-owner|other-device").isEmpty())
-                store.dao().acknowledge(row.epoch, row.providerId, row.revision, null)
+                store.dao().acknowledge(row.epoch, row.providerId, row.revision, null, row.binding)
             }
             inStore(name) { store ->
                 assertTrue(store.dao().pending(binding).isEmpty())
