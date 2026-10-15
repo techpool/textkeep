@@ -28,6 +28,7 @@ class FaultRecoveryTest {
     @Before fun disposableEmulatorOnly() {
         check(BuildConfig.DEBUG && context.packageName.endsWith(".debug"))
         check(Build.HARDWARE in setOf("ranchu", "goldfish"))
+        check(!CloudIdentity.settings(context).getBoolean("sync",false)) { "Disable cloud sync on the disposable emulator" }
         assumeTrue(point in receiptPoints || point in sourcePoints)
         check(TelephonyCore.unlocked(context) && TelephonyCore.isDefault(context))
         WorkManager.getInstance(context).cancelAllWork().result.get(10, TimeUnit.SECONDS)

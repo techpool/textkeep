@@ -22,6 +22,7 @@ class DefaultSmsTest {
     @Before fun emulatorOnly() {
         check(BuildConfig.DEBUG && context.packageName.endsWith(".debug"))
         check(Build.HARDWARE in setOf("ranchu", "goldfish")) { "Use a disposable emulator" }
+        check(!CloudIdentity.settings(context).getBoolean("sync",false)) { "Disable cloud sync on the disposable emulator" }
     }
     @Test fun selectThroughNormalSystemRolePrompt() {
         check(!context.getSystemService(KeyguardManager::class.java).isDeviceSecure) { "Use an emulator without a credential for this unlocked flow" }

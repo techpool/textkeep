@@ -94,7 +94,7 @@ class MainActivity:ComponentActivity(){
       Row{FilterChip(selected=onlyOtp,onClick={onlyOtp=!onlyOtp},label={Text("Verification codes")})}
       val threads=messages.filter{(it.body.contains(search,true)||it.address.contains(search,true))&&(!onlyOtp||OtpParser.parse(it.body)!=null)}.groupBy{it.threadId}.values.map{it.maxBy{m->m.date}}.sortedByDescending{it.date}
       LazyColumn(Modifier.weight(1f)){items(threads){m->
-       Card(onClick={selected=m},modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Column(Modifier.padding(16.dp)){
+       Card(onClick={selected=m;if(m.threadId>0&&TelephonyCore.isDefault(this@MainActivity))action{TelephonyCore.markThreadRead(this@MainActivity,m.threadId)}},modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Column(Modifier.padding(16.dp)){
         Text(m.address,style=MaterialTheme.typography.titleMedium);Text(m.body,maxLines=2)
         Text("${DateFormat.getDateTimeInstance().format(Date(m.date))} · ${messages.count{it.threadId==m.threadId&&!it.read}} unread",style=MaterialTheme.typography.labelSmall)
        }}

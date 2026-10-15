@@ -165,6 +165,7 @@ if (process.argv.includes("--sms")) {
   command(["shell", "svc", "wifi", "disable"]);
   command(["shell", "svc", "data", "disable"]);
   await radioTest();
+  test("readingAThreadChangesOnlyItsIncomingRows");
   test("prepareProviderInsertForRestart", "provider-prepare");
   command(["shell", "am", "force-stop", target]);
   test("verifyProviderInsertAfterRestart", "provider-verify");

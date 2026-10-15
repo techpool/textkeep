@@ -35,6 +35,7 @@ class DurabilityTest {
         check(BuildConfig.DEBUG && context.packageName.endsWith(".debug"))
         check(Build.HARDWARE in setOf("ranchu", "goldfish")) { "Use a disposable emulator, not a personal phone" }
         check(TelephonyCore.unlocked(context))
+        check(!CloudIdentity.settings(context).getBoolean("sync",false)) { "Use a disposable emulator with cloud sync disabled" }
         LocalCrypto.initialize(context)
     }
 
@@ -301,6 +302,32 @@ class DurabilityTest {
             }
             context.contentResolver.delete(Telephony.Sms.CONTENT_URI,"address=? AND body=? AND date=?",args)
         }
+    }
+
+    @Test fun readingAThreadChangesOnlyItsIncomingRows() {
+        check(TelephonyCore.isDefault(context))
+        val text="Synthetic read-state fixture ${UUID.randomUUID()}"
+        val first=Telephony.Threads.getOrCreateThreadId(context,"+15550001511")
+        val other=Telephony.Threads.getOrCreateThreadId(context,"+15550001512")
+        val rows=listOf(first to Telephony.Sms.MESSAGE_TYPE_INBOX,first to Telephony.Sms.MESSAGE_TYPE_SENT,other to Telephony.Sms.MESSAGE_TYPE_INBOX)
+        try {
+            for((thread,type) in rows) context.contentResolver.insert(Telephony.Sms.CONTENT_URI,ContentValues().apply {
+                put("address",if(thread==first)"+15550001511" else "+15550001512");put("body",text)
+                put("date",System.currentTimeMillis());put("thread_id",thread);put("type",type);put("read",0);put("seen",0)
+            }) ?: error("Synthetic row insertion failed")
+            val before=mutableMapOf<Long,Pair<Int,Int>>()
+            context.contentResolver.query(Telephony.Sms.CONTENT_URI,arrayOf("_id","read","seen"),"body=?",arrayOf(text),null)!!.use { cursor ->
+                while(cursor.moveToNext())before[cursor.getLong(0)]=cursor.getInt(1) to cursor.getInt(2)
+            }
+            TelephonyCore.markThreadRead(context,first)
+            context.contentResolver.query(Telephony.Sms.CONTENT_URI,arrayOf("_id","thread_id","type","read","seen"),"body=?",arrayOf(text),null)!!.use { cursor ->
+                assertEquals(3,cursor.count)
+                while(cursor.moveToNext()) {
+                    val expected=if(cursor.getLong(1)==first&&cursor.getInt(2)==Telephony.Sms.MESSAGE_TYPE_INBOX)1 to 1 else before.getValue(cursor.getLong(0))
+                    assertEquals(expected.first,cursor.getInt(3));assertEquals(expected.second,cursor.getInt(4))
+                }
+            }
+        } finally { context.contentResolver.delete(Telephony.Sms.CONTENT_URI,"body=?",arrayOf(text)) }
     }
 
     @Test fun verifyProviderInsertAfterRestart() = runBlocking {

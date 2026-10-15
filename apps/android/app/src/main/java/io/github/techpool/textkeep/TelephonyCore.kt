@@ -22,6 +22,13 @@ object TelephonyCore {
  fun isDefault(c:Context)=c.getSystemService(android.app.role.RoleManager::class.java).isRoleHeld(android.app.role.RoleManager.ROLE_SMS)
  fun unlocked(c:Context)=c.getSystemService(UserManager::class.java).isUserUnlocked
  fun smsManager(c:Context,sub:Int):SmsManager = if(sub>=0){if(Build.VERSION.SDK_INT>=31)c.getSystemService(SmsManager::class.java).createForSubscriptionId(sub)else @Suppress("DEPRECATION") SmsManager.getSmsManagerForSubscriptionId(sub)}else c.getSystemService(SmsManager::class.java)
+ fun markThreadRead(c:Context,threadId:Long){
+  check(isDefault(c)){"Choose TextKeep as default before changing message state"};require(threadId>0)
+  val values=ContentValues().apply{put("read",1);put("seen",1)}
+  c.contentResolver.update(Telephony.Sms.CONTENT_URI,values,"thread_id=? AND type=?",arrayOf(threadId.toString(),Telephony.Sms.MESSAGE_TYPE_INBOX.toString()))
+  c.contentResolver.update(Telephony.Mms.CONTENT_URI,values,"thread_id=? AND msg_box=?",arrayOf(threadId.toString(),Telephony.Mms.MESSAGE_BOX_INBOX.toString()))
+  SyncScheduler.now(c)
+ }
  suspend fun replay(c:Context,priorityId:String?=null) {
   if(!unlocked(c)||!isDefault(c)) return
   val dao=LocalStore.get(c).dao()
