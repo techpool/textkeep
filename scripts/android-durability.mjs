@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const serial = process.argv[2];
 if (!serial?.startsWith("emulator-"))
@@ -62,7 +63,12 @@ function fault(point) {
     if (error.status == null) throw error;
     output = String(error.stdout || "") + String(error.stderr || "");
   }
-  if (/OK \(1 test\)/.test(output)) throw Error("Fault did not terminate instrumentation: " + point);
+  mkdirSync(".private", { recursive: true });
+  writeFileSync(join(".private", "fault-" + point + ".log"), output);
+  if (/OK \(1 test\)|FAILURES!!!/.test(output) || !/shortMsg=Process (?:crashed|died)/i.test(output)) {
+    console.error(output);
+    throw Error("Android did not report the expected process death: " + point);
+  }
   // A crash-shaped command result alone is insufficient: this next process
   // must verify the durable checkpoint marker, different PID and recovered data.
   test("verifyAfterTermination", undefined, className, extras);
