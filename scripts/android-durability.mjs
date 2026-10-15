@@ -118,6 +118,9 @@ async function radioTest() {
 test("prepareCommittedJournalForRestart", "prepare");
 command(["shell", "am", "force-stop", target]);
 test("verifyCommittedJournalAfterRestart", "verify");
+test("preparePendingOutboxForRestart", "outbox-prepare");
+command(["shell", "am", "force-stop", target]);
+test("verifyPendingOutboxAfterRestart", "outbox-verify");
 test("acknowledgementCannotEraseAnEditMadeDuringUpload");
 test("mmsTextPduPreservesUnicodeAndHeaders");
 test("firebaseAuthKeepsApplicationContextAndSealsPreferences");
@@ -127,7 +130,14 @@ if (process.argv.includes("--sms")) {
   command(["shell", "svc", "wifi", "disable"]);
   command(["shell", "svc", "data", "disable"]);
   await radioTest();
+  test("prepareProviderInsertForRestart", "provider-prepare");
+  command(["shell", "am", "force-stop", target]);
+  test("verifyProviderInsertAfterRestart", "provider-verify");
 }
 console.log(
-  "PASS: committed encrypted receipt recovered in a new process, interrupted AtomicFile replacement retained, revision acknowledgement preserved, and synthetic MMS codec verified. Carrier transport and locked/Direct Boot behavior are separate gates.",
+  "PASS: encrypted journal and bound pending outbox survived process restarts, interrupted AtomicFile replacement retained, revision acknowledgement preserved, and synthetic MMS codec verified. Carrier transport and locked/Direct Boot behavior are separate gates.",
 );
+if (process.argv.includes("--sms"))
+  console.log(
+    "PASS: normal SMS role cancellation/acceptance, offline OTP receipt/copy, interrupted provider acknowledgement, distinct identical receipts and historical-alert suppression verified.",
+  );
