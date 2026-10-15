@@ -22,5 +22,6 @@ hooks:
         npm run check
         npm test
         npm run secret-scan
+        node scripts/prepare-gradle.mjs
       timeoutSeconds: 900
       platforms: [android]
