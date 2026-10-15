@@ -196,7 +196,7 @@ class DurabilityTest {
             val notices = context.getSystemService(android.app.NotificationManager::class.java).activeNotifications
             assertFalse("Recovered historical OTPs must not create fresh alerts", notices.any { it.id == first.hashCode() || it.id == second.hashCode() })
         } finally {
-            context.contentResolver.delete(Telephony.Sms.Inbox.CONTENT_URI, "address=? AND body=? AND date=?",
+            context.contentResolver.delete(Telephony.Sms.CONTENT_URI, "address=? AND body=? AND date=?",
                 arrayOf(fixture.getString("address"), fixture.getString("text"), fixture.getLong("date").toString()))
             LocalStore.get(context).openHelper.writableDatabase.execSQL("DELETE FROM receipts WHERE id IN (?, ?)", arrayOf(first, second))
             assertTrue(stage.edit().remove("provider").commit())
