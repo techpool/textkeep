@@ -17,6 +17,10 @@ Hosted app: [textkeep.decafdevs.com](https://textkeep.decafdevs.com/). The [sign
 
 Material 3 on Android and MUI on the web share a restrained green/cream visual system. All sample messages are synthetic. There is no analytics, cloud LLM, remote SMS sender, perpetual foreground sync service, second production database server or separate backup product.
 
+![Public homepage with a synthetic messaging preview](docs/images/landing-synthetic.png)
+
+The homepage preview uses invented senders and messages. It is an illustration, not a capture of a user's inbox.
+
 ## Build
 
 Pinned prerequisites: Node 24.14.1, Java 21 (Java 17 bytecode), Gradle wrapper 9.4.1, Android Gradle Plugin 9.2.1, Kotlin 2.3.21 and Android SDK 37. Android minimum API 29. Exact npm dependencies and Gradle library versions are committed.
