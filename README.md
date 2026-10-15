@@ -4,12 +4,14 @@ A native Android SMS manager with offline verification-code copy notifications, 
 
 This is an experimental sideloaded application. Verify carrier SMS/MMS and your device's background/lock-screen behavior on a test phone before using it as your daily default messaging app. A built APK is not proof of carrier reliability. See [the acceptance checklist](docs/acceptance.md).
 
-Hosted app: [textkeep.decafdevs.com](https://textkeep.decafdevs.com/). The [signed 0.1.5 APK](https://github.com/techpool/textkeep/releases/download/v0.1.5/textkeep-0.1.5.apk) uses this backend with a separate archive for each verified Google user. Connect an OAuth-capable Streamable HTTP client to `https://textkeep.decafdevs.com/mcp`; sensitive access is optional and separate.
+Hosted app: [textkeep.decafdevs.com](https://textkeep.decafdevs.com/). The [signed 0.2.0 APK](https://github.com/techpool/textkeep/releases/download/v0.2.0/textkeep-0.2.0.apk) uses this backend with a separate archive for each verified Google user. Connect an OAuth-capable Streamable HTTP client to `https://textkeep.decafdevs.com/mcp`; sensitive access is optional and separate.
 
-APK version 0.1.5, build 24. SHA-256: `fd8bdab1da38d5ed4a4928d837726b8b966bd8b6dbd8c133f15b93497ace0409`. Install as an update without uninstalling an existing release.
+APK version 0.2.0, build 29. SHA-256: `a862a038224bb67d231534bc2140d1b73a7993a661dadfdc0894de66bd2d5477`. Install as an update without uninstalling an existing release.
 
 ## What it does
 
+- Organizes conversations with search, unread/code/archive filters, pins, unread badges and local archive/restore. Offers inline SMS replies and a full image/SIM/draft composer, with System, Light and Dark themes.
+- Keeps cloud controls and live progress in Settings. Successful upload chunks continue without failure backoff, and normal lock/unlock does not start another reconciliation.
 - Receives, persists and sends local SMS without needing cloud login. Handles multipart SMS, Unicode, short codes, original sender IDs, drafts and send/delivery callbacks.
 - Recognizes OTP context locally and offers a user-initiated sensitive clipboard action. Historic imports do not generate fresh OTP alerts. The lock-screen public notification hides message content by default.
 - Uses Android's default SMS role. Native SMS and carrier MMS transport are part of that responsibility. Cloud sync covers Android SMS provider records in inbox, sent, draft, outbox, failed and queued states. MMS attachments, RCS and other apps' private messages are outside cloud sync.
@@ -18,6 +20,12 @@ APK version 0.1.5, build 24. SHA-256: `fd8bdab1da38d5ed4a4928d837726b8b966bd8b6d
 - Exposes five read-only MCP tools through Streamable HTTP and a scoped stdio adapter. Sensitive messages require separate explicit owner consent.
 
 Material 3 on Android and MUI on the web share a restrained green/cream visual system. All sample messages are synthetic. There is no analytics, cloud LLM, remote SMS sender, perpetual foreground sync service, second production database server or separate backup product.
+
+| Light inbox | Dark inbox |
+| --- | --- |
+| ![Light Android inbox with synthetic test messages](docs/images/android-light-inbox.png) | ![Dark Android inbox with synthetic test messages](docs/images/android-dark-inbox.png) |
+
+These Android screenshots come from the API 36 emulator tests. Search and filters cover loaded local messages; Load older messages expands that window. Pins and archives are local to the phone, and archived conversations stay archived when a new message arrives.
 
 ![Public homepage with a synthetic messaging preview](docs/images/landing-synthetic.png)
 
