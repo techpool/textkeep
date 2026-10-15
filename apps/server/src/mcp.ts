@@ -13,6 +13,7 @@ export function mcpServer(service: Service, identity: Identity) {
     openWorldHint: false,
   };
   const bounded = (value: unknown): unknown => {
+    if (value instanceof Date) return value.toISOString();
     if (Array.isArray(value)) return value.slice(0, 50).map(bounded);
     if (value && typeof value === "object") {
       const output: Record<string, unknown> = {};

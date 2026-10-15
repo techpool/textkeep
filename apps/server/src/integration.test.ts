@@ -175,6 +175,25 @@ test(
         arguments: { query: "Search fixture", limit: 2 },
       });
       assert.match(JSON.stringify(result), /Search fixture/);
+      const sync = await client.callTool({
+        name: "get_sync_status",
+        arguments: {},
+      });
+      const statusText = (
+        sync.content as Array<{ type: string; text: string }>
+      )[0];
+      assert.ok(statusText);
+      assert.equal(statusText.type, "text");
+      const status = JSON.parse(statusText.text).data;
+      const timestamp = status.devices.find(
+        (d: { id: string }) => d.id === device,
+      ).last_sync;
+      const stored = await db.query(
+        "SELECT last_sync FROM textkeep.devices WHERE id=$1",
+        [device],
+      );
+      assert.equal(timestamp, stored.rows[0].last_sync.toISOString());
+      assert.ok(Number.isFinite(Date.parse(timestamp)));
       await client.close();
       await server.close();
       await db.query("DELETE FROM textkeep.audit_events WHERE owner=ANY($1)", [
