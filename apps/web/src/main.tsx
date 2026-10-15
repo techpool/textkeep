@@ -220,7 +220,7 @@ function Landing({ config }: { config: PublicConfig | null }) {
               {config?.release ? (
                 <Button
                   variant="contained"
-                  href="/downloads/textkeep.apk"
+                  href={`/downloads/textkeep.apk?v=${encodeURIComponent(config.release.version)}&sha256=${encodeURIComponent(config.release.sha256)}`}
                   startIcon={<Android />}
                 >
                   Download for Android

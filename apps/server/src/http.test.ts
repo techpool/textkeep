@@ -9,6 +9,9 @@ import { migrate } from "./database.js";
 import { secretHash, Vault } from "./crypto.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 const url = process.env.TEST_DATABASE_URL;
 test(
   "HTTP health, auth denial, CSRF origin, OAuth registration/PKCE and actual Streamable HTTP client",
@@ -24,6 +27,12 @@ test(
     jwk.kid = "synthetic";
     jwk.alg = "RS256";
     const origin = "http://127.0.0.1:55439";
+    const releaseDir = await mkdtemp(
+      join(tmpdir(), "textkeep-synthetic-release-"),
+    );
+    const apkPath = join(releaseDir, "synthetic.apk");
+    const apkBytes = Buffer.from("Synthetic APK HTTP fixture; not installable");
+    await writeFile(apkPath, apkBytes);
     const app = await buildApp(
       {
         production: false,
@@ -40,11 +49,29 @@ test(
         firebaseWeb: { projectId: "synthetic-auth" },
         oauthJwks: { keys: [jwk] },
         port: 55439,
+        apkPath,
+        releaseMetadata: { version: "0.0.0-synthetic" },
       },
       db,
     );
     await app.listen({ host: "127.0.0.1", port: 55439 });
     try {
+      for (const path of [
+        "/downloads/textkeep.apk",
+        "/downloads/textkeep.apk?v=synthetic&sha256=synthetic",
+      ]) {
+        const download = await fetch(origin + path);
+        assert.equal(download.status, 200);
+        assert.equal(
+          download.headers.get("cache-control"),
+          "no-store, max-age=0",
+        );
+        assert.equal(
+          download.headers.get("content-disposition"),
+          'attachment; filename="textkeep-0.0.0-synthetic.apk"',
+        );
+        assert.deepEqual(Buffer.from(await download.arrayBuffer()), apkBytes);
+      }
       const proxied = (client: string) =>
         app.inject({
           method: "GET",
@@ -461,6 +488,7 @@ test(
       await db.query("DELETE FROM textkeep.users WHERE uid=$1", [googleUid]);
     } finally {
       await app.close();
+      await rm(releaseDir, { recursive: true, force: true });
     }
   },
 );

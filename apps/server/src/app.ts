@@ -478,6 +478,7 @@ export async function buildApp(c: Config, db: pg.Pool) {
       return reply.code(404).send({ error: "Release not available" });
     reply
       .header("Content-Type", "application/vnd.android.package-archive")
+      .header("Cache-Control", "no-store, max-age=0")
       .header(
         "Content-Disposition",
         `attachment; filename="textkeep-${(c.releaseMetadata as { version: string }).version}.apk"`,
