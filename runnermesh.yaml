@@ -22,6 +22,6 @@ hooks:
         npm run check
         npm test
         npm run secret-scan
-        node scripts/prepare-gradle.mjs
+        node scripts/prepare-gradle.mjs "$PWD/../gradle-home"
       timeoutSeconds: 900
       platforms: [android]

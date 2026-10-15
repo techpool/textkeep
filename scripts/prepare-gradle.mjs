@@ -6,7 +6,9 @@ import { join } from "node:path";
 // RunnerMesh gives each build a private Gradle home. Use curl for the initial
 // download because Java's downloader cannot reach the redirect host on some
 // runners. The wrapper still verifies and installs the official distribution.
-const home = process.env.GRADLE_USER_HOME;
+// RunnerMesh 0.8 initializes this variable after preBuild hooks. Its private
+// cache is a sibling of the checkout; the hook supplies that path explicitly.
+const home = process.env.GRADLE_USER_HOME || process.argv[2];
 if (!home) throw Error("A build-specific GRADLE_USER_HOME is required");
 const properties = readFileSync(
   new URL(
