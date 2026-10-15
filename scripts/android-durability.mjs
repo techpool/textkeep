@@ -152,6 +152,7 @@ test("prepareCommittedJournalForRestart", "prepare");
 command(["shell", "am", "force-stop", target]);
 test("verifyCommittedJournalAfterRestart", "verify");
 test("committedBackupWithoutBaseIsDiscovered");
+test("successfulUploadChunksContinueAndManualRetryReplacesDelay");
 test("preparePendingOutboxForRestart", "outbox-prepare");
 command(["shell", "am", "force-stop", target]);
 test("verifyPendingOutboxAfterRestart", "outbox-verify");

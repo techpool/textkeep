@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.Flow
  @Query("SELECT * FROM sources WHERE uploadedRevision < revision AND binding=:binding AND error IS NULL ORDER BY providerId DESC LIMIT 100") suspend fun pending(binding:String):List<Source>
  @Query("SELECT count(*) FROM sources WHERE uploadedRevision < revision") fun pendingCount():Flow<Int>
  @Query("SELECT count(*) FROM sources WHERE error IS NOT NULL") fun failedCount():Flow<Int>
- @Query("SELECT * FROM state WHERE `key` IN ('lastUpload','lastReconcile','scanCursor','providerMaximum','deviceId','syncError','providerReset')") fun diagnostics():Flow<List<State>>
+ @Query("SELECT * FROM state WHERE `key` IN ('lastUpload','lastReconcile','scanCursor','providerMaximum','deviceId','accountBinding','syncError','providerReset') OR `key` LIKE 'retryAfter:%'") fun diagnostics():Flow<List<State>>
  @Query("UPDATE sources SET uploadedRevision=CASE WHEN :error IS NULL THEN :revision ELSE uploadedRevision END,error=:error WHERE epoch=:epoch AND providerId=:id AND revision=:revision AND binding=:binding") suspend fun acknowledge(epoch:String,id:Long,revision:Long,error:String?,binding:String)
  @Query("UPDATE sources SET error=NULL WHERE error IS NOT NULL") suspend fun retry()
  @Query("SELECT value FROM state WHERE `key`=:key") suspend fun state(key:String):String?

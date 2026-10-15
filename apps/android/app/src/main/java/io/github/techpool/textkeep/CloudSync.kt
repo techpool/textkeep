@@ -80,7 +80,9 @@ object SyncScheduler {
  fun periodic(c:Context){if(!TelephonyCore.unlocked(c))return;WorkManager.getInstance(c).enqueueUniquePeriodicWork("reconcile",ExistingPeriodicWorkPolicy.KEEP,PeriodicWorkRequestBuilder<ReconcileWorker>(15,TimeUnit.MINUTES).build())}
  fun now(c:Context){if(!TelephonyCore.unlocked(c))return;WorkManager.getInstance(c).enqueueUniqueWork("reconcile-now",ExistingWorkPolicy.KEEP,OneTimeWorkRequestBuilder<ReconcileWorker>().build())}
  fun continueScan(c:Context){WorkManager.getInstance(c).enqueueUniqueWork("reconcile-pages",ExistingWorkPolicy.APPEND_OR_REPLACE,OneTimeWorkRequestBuilder<ReconcileWorker>().build())}
- fun upload(c:Context){val unmetered=CloudIdentity.settings(c).getBoolean("wifiOnly",false);WorkManager.getInstance(c).enqueueUniqueWork("upload",ExistingWorkPolicy.KEEP,OneTimeWorkRequestBuilder<UploadWorker>().addTag("cloud").setConstraints(Constraints.Builder().setRequiredNetworkType(if(unmetered)NetworkType.UNMETERED else NetworkType.CONNECTED).build()).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,TimeUnit.SECONDS).build())}
+ private fun uploadRequest(c:Context)=OneTimeWorkRequestBuilder<UploadWorker>().addTag("cloud").setConstraints(Constraints.Builder().setRequiredNetworkType(if(CloudIdentity.settings(c).getBoolean("wifiOnly",false))NetworkType.UNMETERED else NetworkType.CONNECTED).build()).setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,TimeUnit.SECONDS).build()
+ fun upload(c:Context,restart:Boolean=false)=WorkManager.getInstance(c).enqueueUniqueWork("upload",if(restart)ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,uploadRequest(c))
+ internal fun continueUpload(c:Context)=WorkManager.getInstance(c).enqueueUniqueWork("upload",ExistingWorkPolicy.APPEND_OR_REPLACE,uploadRequest(c))
 }
 class ReconcileWorker(c:Context,p:WorkerParameters):CoroutineWorker(c,p){companion object{private val reconciliation=Mutex()}
  override suspend fun doWork():Result=reconciliation.withLock{reconcile()}
@@ -125,7 +127,16 @@ class ReconcileWorker(c:Context,p:WorkerParameters):CoroutineWorker(c,p){compani
   return Result.success()
  }catch(e:Exception){LocalStore.get(c).dao().state(State("syncError",e.message?:"Local reconciliation failed"));return Result.retry()}
 }}
-class UploadWorker(c:Context,p:WorkerParameters):CoroutineWorker(c,p){override suspend fun doWork():Result{val c=applicationContext;val dao=LocalStore.get(c).dao()
+class UploadWorker(c:Context,p:WorkerParameters):CoroutineWorker(c,p){
+ companion object {
+  internal suspend fun completeChunk(c:Context,dao:LocalDao,binding:String):Result {
+   // A bounded successful chunk is continuation, not a failed attempt. Persist
+   // its successor before finishing so healthy imports never accumulate backoff.
+   if(dao.pending(binding).isNotEmpty())SyncScheduler.continueUpload(c).result.get(10,TimeUnit.SECONDS)
+   return Result.success()
+  }
+ }
+ override suspend fun doWork():Result{val c=applicationContext;val dao=LocalStore.get(c).dao()
  if(!CloudIdentity.settings(c).getBoolean("sync",false))return Result.success()
  var selectedDestination:UploadDestination?=null
  try{val destination=CloudIdentity.uploadDestination(c)?:return Result.success();selectedDestination=destination;val device=destination.device;val binding=destination.binding
@@ -137,6 +148,6 @@ class UploadWorker(c:Context,p:WorkerParameters):CoroutineWorker(c,p){override s
    destination.requireCurrent(CloudIdentity.uploadDestination(c))
    val a=r.getJSONArray("acknowledgements");for(i in 0 until a.length()){val ack=a.getJSONObject(i);val id=ack.optString("providerId").toLongOrNull()?:continue;val row=selected.find{it.providerId==id}?:continue;val error=if(ack.optString("status") in listOf("committed","suppressed","stale"))null else ack.optString("error","Record rejected");DurableSources.acknowledge(c,dao,row,error)}
    dao.uploadStatus(binding,System.currentTimeMillis().toString(),"")
-  };return Result.retry()
- }catch(e:Exception){val selected=selectedDestination;if(selected!=null){if(runCatching{CloudIdentity.uploadDestination(c)}.getOrNull()!=selected)return Result.success();dao.uploadStatus(selected.binding,null,e.message?:"Upload failed")}else dao.state(State("syncError",e.message?:"Upload failed"));return Result.retry()}
+  };return completeChunk(c,dao,binding)
+ }catch(e:kotlinx.coroutines.CancellationException){throw e}catch(e:Exception){val selected=selectedDestination;if(selected!=null){if(runCatching{CloudIdentity.uploadDestination(c)}.getOrNull()!=selected)return Result.success();dao.uploadStatus(selected.binding,null,e.message?:"Upload failed")}else dao.state(State("syncError",e.message?:"Upload failed"));return Result.retry()}
 }}

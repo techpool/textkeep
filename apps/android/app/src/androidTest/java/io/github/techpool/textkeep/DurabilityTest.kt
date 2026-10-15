@@ -9,6 +9,11 @@ import android.util.AtomicFile
 import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.work.WorkManager
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
+import androidx.work.WorkInfo
+import androidx.work.NetworkType
+import androidx.work.ListenableWorker
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.mms.pdu_alt.*
 import kotlinx.coroutines.runBlocking
@@ -81,6 +86,43 @@ class DurabilityTest {
             assertEquals(body,restored.second.getString("body"))
             assertTrue(base.exists())
         } finally { AtomicFile(base).delete() }
+    }
+
+    @Test fun successfulUploadChunksContinueAndManualRetryReplacesDelay() = runBlocking {
+        val wm=WorkManager.getInstance(context)
+        val prefs=CloudIdentity.settings(context)
+        val previousWifi=prefs.getBoolean("wifiOnly",false)
+        val name="synthetic-upload-scheduling-${UUID.randomUUID()}.db"
+        val store=Room.databaseBuilder(context,LocalStore::class.java,name).build()
+        try {
+            wm.cancelUniqueWork("upload").result.get(10,TimeUnit.SECONDS)
+            val delayed=OneTimeWorkRequestBuilder<UploadWorker>().setInitialDelay(1,TimeUnit.DAYS).build()
+            wm.enqueueUniqueWork("upload",ExistingWorkPolicy.KEEP,delayed).result.get(10,TimeUnit.SECONDS)
+            val binding="https://synthetic.invalid|owner|device"
+            store.dao().source(Source("synthetic-epoch",1,"digest",1,LocalCrypto.encrypt("{}"),binding=binding))
+            assertTrue(prefs.edit().putBoolean("wifiOnly",true).commit())
+            assertEquals(ListenableWorker.Result.success(),UploadWorker.completeChunk(context,store.dao(),binding))
+            val chain=wm.getWorkInfosForUniqueWork("upload").get(10,TimeUnit.SECONDS)
+            assertEquals(2,chain.size)
+            assertEquals(WorkInfo.State.ENQUEUED,chain.single{it.id==delayed.id}.state)
+            val successor=chain.single{it.id!=delayed.id}
+            assertEquals(WorkInfo.State.BLOCKED,successor.state)
+            assertEquals(0,successor.runAttemptCount)
+            assertEquals(NetworkType.UNMETERED,successor.constraints.requiredNetworkType)
+            // The real manual action must replace this chain, rather than KEEP
+            // the day-long delay. Sync stays disabled, so no fixture can upload.
+            SyncScheduler.upload(context,restart=true).result.get(10,TimeUnit.SECONDS)
+            val replacement=wm.getWorkInfosForUniqueWork("upload").get(10,TimeUnit.SECONDS)
+                .single{next->chain.none{it.id==next.id}}
+            assertEquals(0,replacement.runAttemptCount)
+            assertTrue(replacement.state.isFinished||replacement.nextScheduleTimeMillis<System.currentTimeMillis()+60_000)
+            assertEquals(NetworkType.UNMETERED,replacement.constraints.requiredNetworkType)
+        } finally {
+            wm.cancelUniqueWork("upload").result.get(10,TimeUnit.SECONDS)
+            prefs.edit().putBoolean("wifiOnly",previousWifi).commit()
+            store.close();context.deleteDatabase(name)
+        }
+        Unit
     }
 
     @Test fun acknowledgementCannotEraseAnEditMadeDuringUpload() = runBlocking {

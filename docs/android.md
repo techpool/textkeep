@@ -28,6 +28,12 @@ On API 37, provider inserts also store the receipt identity in Android's documen
 
 Incoming deliveries replay their specific journal entry first. Deferred/invalid entries remain encrypted and move behind other recovery work, so a failed MMS does not block a fresh SMS or cause a historical OTP alert. Receivers process one selected receipt rather than scanning the recovery backlog; normal recovery remains bounded to 100 entries per pass.
 
+## Pending uploads and retry
+
+Pending is the number of local SMS source records whose newest revision has not been acknowledged by the server. It includes rejected records; it is not a count of failed sends, and can increase while initial import discovers more rows or messages change. The Sync screen shows the upload worker's running/waiting state, its scheduled retry time and any server-requested wait.
+
+Successful bounded upload chunks queue a fresh continuation rather than increasing failure backoff. Real transport errors still retry with exponential backoff, Android network/background constraints still apply, and HTTP 429 waits are honored. **Reconcile and retry** clears record rejections and replaces an old delayed upload job without clearing the queue, account, keys or registration. While cloud sync is paused, the button only requests local reconciliation. Reopening the app and periodic reconciliation also request upload work; they preserve an existing upload job.
+
 ## Framework durability checks
 
 Build `assembleDebug assembleDebugAndroidTest`, install both generated APKs normally on a disposable emulator, and run:
