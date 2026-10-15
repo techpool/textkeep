@@ -77,6 +77,13 @@ object CloudIdentity {
  suspend fun signOut(c:Context){settings(c).edit().putBoolean("sync",false).apply();WorkManager.getInstance(c).cancelAllWorkByTag("cloud");auth(c).signOut()}
 }
 object SyncScheduler {
+ private val startupCheck=Mutex()
+ internal fun reconcileDue(lastCompleted:Long?,cursor:Long,now:Long)=cursor>0||lastCompleted==null||now-lastCompleted>=TimeUnit.MINUTES.toMillis(15)||now<lastCompleted
+ suspend fun onAppOpened(c:Context)=startupCheck.withLock {
+  if(!TelephonyCore.unlocked(c)||ContextCompat.checkSelfPermission(c,Manifest.permission.READ_SMS)!=PackageManager.PERMISSION_GRANTED)return@withLock
+  val dao=LocalStore.get(c).dao()
+  if(reconcileDue(dao.state("lastReconcile")?.toLongOrNull(),dao.state("scanCursor")?.toLongOrNull()?:0,System.currentTimeMillis()))now(c)
+ }
  fun periodic(c:Context){if(!TelephonyCore.unlocked(c))return;WorkManager.getInstance(c).enqueueUniquePeriodicWork("reconcile",ExistingPeriodicWorkPolicy.KEEP,PeriodicWorkRequestBuilder<ReconcileWorker>(15,TimeUnit.MINUTES).build())}
  fun now(c:Context){if(!TelephonyCore.unlocked(c))return;WorkManager.getInstance(c).enqueueUniqueWork("reconcile-now",ExistingWorkPolicy.KEEP,OneTimeWorkRequestBuilder<ReconcileWorker>().build())}
  fun continueScan(c:Context){WorkManager.getInstance(c).enqueueUniqueWork("reconcile-pages",ExistingWorkPolicy.APPEND_OR_REPLACE,OneTimeWorkRequestBuilder<ReconcileWorker>().build())}

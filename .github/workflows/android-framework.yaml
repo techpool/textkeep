@@ -61,5 +61,6 @@ jobs:
             .private/*.log
             .private/framework-ui.xml
             .private/framework-screen.png
+            .private/redesign/*.png
           include-hidden-files: true
           retention-days: 7

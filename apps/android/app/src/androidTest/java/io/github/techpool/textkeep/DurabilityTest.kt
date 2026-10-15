@@ -329,8 +329,13 @@ class DurabilityTest {
             assertTrue("The fresh receipt must not wait behind the deferred batch",android.os.SystemClock.elapsedRealtime()-start<10_000)
             val receipt=LocalStore.get(context).dao().receiptById(id) ?: error("Fresh SMS was blocked")
             assertTrue(receipt.providerId>0)
-            assertTrue(manager.activeNotifications.any{it.id==id.hashCode()&&it.notification.extras.getCharSequence("android.text")?.contains("515253")==true})
-            assertEquals(30_000L,manager.activeNotifications.single{it.id==id.hashCode()}.notification.timeoutAfter)
+            // NotificationManager publishes through another process; wait for that observable
+            // delivery rather than racing its Binder response after the receipt is committed.
+            val deadline=android.os.SystemClock.elapsedRealtime()+5000
+            var notification=manager.activeNotifications.firstOrNull{it.id==id.hashCode()}
+            while(notification==null&&android.os.SystemClock.elapsedRealtime()<deadline){android.os.SystemClock.sleep(50);notification=manager.activeNotifications.firstOrNull{it.id==id.hashCode()}}
+            assertTrue(notification?.notification?.extras?.getCharSequence("android.text")?.contains("515253")==true)
+            assertEquals(30_000L,notification!!.notification.timeoutAfter)
             assertTrue(invalid.all{File(directory,"$it.json").exists()})
             TelephonyCore.replay(context)
             assertTrue("Failed MMS must remain encrypted for retry",invalid.all{File(directory,"$it.json").exists()})

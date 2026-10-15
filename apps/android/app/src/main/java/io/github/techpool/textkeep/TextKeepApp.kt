@@ -11,5 +11,5 @@ class TextKeepApp:Application(){
   LocalCrypto.initialize(this)
   return SecurePreferences(super.getSharedPreferences("sealed-$name",mode),name)
  }
- override fun onCreate(){super.onCreate();if(TelephonyCore.unlocked(this)){Notifications.channels(this);LocalCrypto.initialize(this);localScope.launch{TelephonyCore.replay(this@TextKeepApp)};SyncScheduler.periodic(this)}}
+ override fun onCreate(){super.onCreate();if(TelephonyCore.unlocked(this)){Notifications.channels(this);LocalCrypto.initialize(this);localScope.launch{TelephonyCore.replay(this@TextKeepApp);SyncScheduler.onAppOpened(this@TextKeepApp)};SyncScheduler.periodic(this)}}
 }

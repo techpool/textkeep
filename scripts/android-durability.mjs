@@ -173,6 +173,11 @@ if (process.argv.includes("--sms")) {
   test("freshReceiptNeverAdoptsAnIdenticalPreexistingProviderRow");
   test("failedMmsReceiptsCannotBlockFreshSms");
   for (const point of ["journal-committed", "receipt-stored", "provider-prepared", "provider-inserted", "provider-linked", "journal-removed", "source-stored", "ack-before", "ack-after"]) fault(point);
+  const organizerSuite = "io.github.techpool.textkeep.OrganizerUiTest";
+  test("organizerNavigationThemesAndLocalActions", undefined, organizerSuite);
+  test("resumeAndScreenLockDoNotEnqueueReconciliation", undefined, organizerSuite);
+  test("settingsAndDraftComposerRemainUsable", undefined, organizerSuite);
+  command(["pull", `/sdcard/Android/data/${target}/files/redesign`, ".private/redesign"]);
 }
 console.log(
   "PASS: encrypted journal and bound pending outbox survived process restarts, interrupted AtomicFile replacement retained, revision acknowledgement preserved, and synthetic MMS codec verified. Carrier transport and locked/Direct Boot behavior are separate gates.",
