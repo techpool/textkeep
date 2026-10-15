@@ -31,4 +31,4 @@ Consent requires Google authentication within the last five minutes. If asked to
 
 The live deployment was verified with an actual Google-owner OAuth session, mandatory S256 PKCE, the official remote SDK, five read-only tool annotations, sync status, refresh rotation, reuse-triggered grant revocation and access denial afterward. This does not assert compatibility with every client or physical phone scenario.
 
-The tester confirmed a successful ChatGPT remote connection after the consent continuation and CSRF fixes were deployed. This establishes its Google login and consent handoff; ChatGPT tool invocation and the separate sensitive-scope choice were not observed in that confirmation.
+The tester confirmed a successful ChatGPT remote connection after the consent continuation and CSRF fixes were deployed. This establishes its Google login and consent handoff; The connected TextKeep integration subsequently invoked `get_sync_status` successfully, including a valid last-sync timestamp. Message-reading tool calls and the separate sensitive-scope choice were not exercised.

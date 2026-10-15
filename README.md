@@ -4,6 +4,8 @@ A native Android SMS manager with offline verification-code copy notifications, 
 
 This is an experimental sideloaded application. Verify carrier SMS/MMS and your device's background/lock-screen behavior on a test phone before using it as your daily default messaging app. A built APK is not proof of carrier reliability. See [the acceptance checklist](docs/acceptance.md).
 
+Hosted app: [textkeep.decafdevs.com](https://textkeep.decafdevs.com/). The [signed 0.1.3 APK](https://github.com/techpool/textkeep/releases/download/v0.1.3/textkeep-0.1.3.apk) uses this backend with a separate archive for each verified Google user. Connect an OAuth-capable Streamable HTTP client to `https://textkeep.decafdevs.com/mcp`; sensitive access is optional and separate.
+
 ## What it does
 
 - Receives, persists and sends local SMS without needing cloud login. Handles multipart SMS, Unicode, short codes, original sender IDs, drafts and send/delivery callbacks.
