@@ -40,7 +40,7 @@ jobs:
           mkdir -p .private
           "$ANDROID_HOME/emulator/emulator" -avd textkeep-ci -no-window -no-snapshot -no-boot-anim -no-audio -gpu software -cores 2 -memory 3072 > .private/emulator.log 2>&1 &
           TEXTKEEP_EMULATOR_PID=$!
-          trap 'adb logcat -d -v threadtime > .private/framework-logcat.log 2>&1; kill "$TEXTKEEP_EMULATOR_PID" 2>/dev/null || true' EXIT
+          trap 'adb logcat -d -v threadtime > .private/framework-logcat.log 2>&1; adb shell uiautomator dump /sdcard/textkeep-test-window.xml >/dev/null 2>&1 || true; adb pull /sdcard/textkeep-test-window.xml .private/framework-ui.xml >/dev/null 2>&1 || true; adb exec-out screencap -p > .private/framework-screen.png 2>/dev/null || true; kill "$TEXTKEEP_EMULATOR_PID" 2>/dev/null || true' EXIT
           timeout 120 adb wait-for-device
           for attempt in $(seq 1 90); do
             if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
@@ -57,6 +57,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-framework-${{ matrix.api }}
-          path: .private/*.log
+          path: |
+            .private/*.log
+            .private/framework-ui.xml
+            .private/framework-screen.png
           include-hidden-files: true
           retention-days: 7

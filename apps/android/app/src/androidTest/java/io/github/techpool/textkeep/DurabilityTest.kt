@@ -269,6 +269,9 @@ class DurabilityTest {
         val id=UUID.randomUUID().toString()
         val directory=File(context.createDeviceProtectedStorageContext().filesDir,"receipts")
         val manager=context.getSystemService(android.app.NotificationManager::class.java)
+        val settings=context.getSharedPreferences("settings",0)
+        val previousLifetime=settings.getInt("otpLifetime",120)
+        assertTrue(settings.edit().putInt("otpLifetime",30).commit())
         var date=System.currentTimeMillis()
         val text="Your OTP is 515253"
         val args=arrayOf("+15550001234",text,date.toString())
@@ -284,12 +287,14 @@ class DurabilityTest {
             val receipt=LocalStore.get(context).dao().receiptById(id) ?: error("Fresh SMS was blocked")
             assertTrue(receipt.providerId>0)
             assertTrue(manager.activeNotifications.any{it.id==id.hashCode()&&it.notification.extras.getCharSequence("android.text")?.contains("515253")==true})
+            assertEquals(30_000L,manager.activeNotifications.single{it.id==id.hashCode()}.notification.timeoutAfter)
             assertTrue(invalid.all{File(directory,"$it.json").exists()})
             TelephonyCore.replay(context)
             assertTrue("Failed MMS must remain encrypted for retry",invalid.all{File(directory,"$it.json").exists()})
             context.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI,arrayOf("_id"),"address=? AND body=? AND date=?",args,null)!!.use{assertEquals(1,it.count)}
         } finally {
             manager.cancel(id.hashCode())
+            assertTrue(settings.edit().putInt("otpLifetime",previousLifetime).commit())
             for (receiptId in invalid+id) {
                 AtomicFile(File(directory,"$receiptId.json")).delete()
                 LocalStore.get(context).openHelper.writableDatabase.execSQL("DELETE FROM receipts WHERE id=?",arrayOf(receiptId))

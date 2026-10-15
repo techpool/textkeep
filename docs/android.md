@@ -8,6 +8,8 @@ The SMS receiver joins multipart segments and preserves original Unicode and sen
 
 OTP recognition is local and versioned. It requires code context, ranks nearby numeric/alphanumeric candidates and rejects ambiguity. Only fresh incoming receipts trigger code alerts. Copy uses a direct secure activity, lock authentication and sensitive clipboard metadata; it never automatically overwrites the clipboard or promises guaranteed erasure.
 
+Settings offers 30-second, 1-minute, 2-minute and 5-minute notification display times. This controls notification dismissal, not the validity of the code. The Sync screen shows the saved server, registered device, Android version, role/permission state, last upload/reconciliation and the current provider-row scan checkpoint. Provider IDs are not message counts, so the checkpoint is not presented as a completion percentage. Withdrawing upload consent pauses sync, and status follows persisted updates without rescanning the inbox for every progress update.
+
 Ordinary process death can be recovered through telephony delivery and the encrypted journal. Force-stop is different: reopen the app to reconcile accessible provider records. WorkManager's 15-minute periodic task is a safety net, not an exact schedule. Doze, battery saver, OEM restrictions, revoked permissions, disabled notifications and offline periods are surfaced as limitations.
 
 Before first unlock, receipts use the public-key envelope journal and never access Firebase tokens or credential-protected Room state. After unlock, replay removes acknowledged journal files. Normal screen lock after first unlock is a different state. Physical-device tests must check OEM lock-screen surfaces and Direct Boot delivery rather than inferring success from code.

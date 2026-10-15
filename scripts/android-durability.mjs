@@ -13,7 +13,12 @@ function command(args, timeout = 180000) {
     maxBuffer: 1024 * 1024,
   });
 }
-if (command(["shell", "getprop", "ro.boot.qemu"]).trim() !== "1")
+const bootQemu = command(["shell", "getprop", "ro.boot.qemu"]).trim();
+const kernelQemu = command(["shell", "getprop", "ro.kernel.qemu"]).trim();
+const hardware = command(["shell", "getprop", "ro.hardware"]).trim();
+const consoleName = command(["emu", "avd", "name"]).trim();
+console.log("Emulator guard", {bootQemu, kernelQemu, hardware});
+if ((bootQemu !== "1" && kernelQemu !== "1") || !["ranchu", "goldfish"].includes(hardware) || !/\nOK$/.test(consoleName))
   throw Error("Refusing to run on a physical phone");
 const runtimeApi = command(["shell", "getprop", "ro.build.version.sdk"]).trim();
 if (
