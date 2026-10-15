@@ -22,38 +22,59 @@ object TelephonyCore {
  fun isDefault(c:Context)=c.getSystemService(android.app.role.RoleManager::class.java).isRoleHeld(android.app.role.RoleManager.ROLE_SMS)
  fun unlocked(c:Context)=c.getSystemService(UserManager::class.java).isUserUnlocked
  fun smsManager(c:Context,sub:Int):SmsManager = if(sub>=0){if(Build.VERSION.SDK_INT>=31)c.getSystemService(SmsManager::class.java).createForSubscriptionId(sub)else @Suppress("DEPRECATION") SmsManager.getSmsManagerForSubscriptionId(sub)}else c.getSystemService(SmsManager::class.java)
- suspend fun replay(c:Context)=receiptLock.withLock {
-  if(!unlocked(c)||!isDefault(c)) return@withLock
+ suspend fun replay(c:Context,priorityId:String?=null) {
+  if(!unlocked(c)||!isDefault(c)) return
   val dao=LocalStore.get(c).dao()
-  for((file,event) in LocalCrypto.readJournal(c)) {
+  val entries=LocalCrypto.readJournal(c,priorityId).iterator()
+  while(true) {
+   val processed=receiptLock.withLock {
+   if(!unlocked(c)||!isDefault(c)||!entries.hasNext())return@withLock false
+   val(file,event)=entries.next()
    val id=file.nameWithoutExtension
+   try {
    if(event.optString("kind").startsWith("mms")) {
     dao.receipt(Receipt(id,LocalCrypto.encrypt(JSONObject().put("kind","mms").put("receivedAt",event.getLong("receivedAt")).toString()),kind="mms",receivedAt=event.getLong("receivedAt")))
-    val receipt=dao.receiptById(id)?:continue
+    val receipt=dao.receiptById(id)?:return@withLock true
     if(receipt.providerId==0L){val provider=MmsCore.receive(c,id,event);dao.update(receipt.copy(providerId=provider,notified=true));if(event.optString("kind")=="mms-complete")Notifications.generic(c,"MMS received","Open TextKeep to view the message")}
-    file.delete();continue
+    file.delete();return@withLock true
    }
    dao.receipt(Receipt(id,LocalCrypto.encrypt(event.toString()),receivedAt=event.getLong("receivedAt")))
    PersistenceCheckpoint.reached(c,"receipt-stored",id)
-   var receipt=dao.receiptById(id)?:continue
+   var receipt=dao.receiptById(id)?:return@withLock true
    if(receipt.providerId==0L) {
-    // Recover an insert whose acknowledgement was interrupted. Match conservatively and never deduplicate imported rows by body.
+    // Positive transaction identity on API 37; earlier providers use a durable
+    // pre-insert high-water mark plus their read-only creator identity.
+    val floorKey="receipt-provider-floor:$id"
+    val floor=dao.state(floorKey)?.toLongOrNull()
     var providerId=0L
-    c.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI,arrayOf("_id"),"address=? AND body=? AND date=?",arrayOf(event.getString("address"),event.getString("body"),event.getLong("date").toString()),"_id DESC")?.use{cursor-> while(cursor.moveToNext()){val candidate=cursor.getLong(0);if(dao.providerClaimed(candidate,id)==0&&dao.knownProvider(candidate)==null){providerId=candidate;break}}}
+    val selection=if(Build.VERSION.SDK_INT>=37)"${Telephony.Sms.TRANSACTION_ID}=? AND creator=?" else "_id>? AND creator=? AND address=? AND body=? AND date=?"
+    val args=if(Build.VERSION.SDK_INT>=37)arrayOf(id,c.packageName)else arrayOf((floor?:0L).toString(),c.packageName,event.getString("address"),event.getString("body"),event.getLong("date").toString())
+    if(Build.VERSION.SDK_INT>=37||floor!=null)c.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI,arrayOf("_id"),selection,args,"_id DESC")?.use{cursor->while(cursor.moveToNext()){val candidate=cursor.getLong(0);if(dao.providerClaimed(candidate,id)==0){providerId=candidate;break}}}
     if(providerId==0L) {
-     val values=ContentValues().apply {put("address",event.getString("address"));put("body",event.getString("body"));put("date",event.getLong("date"));put("date_sent",event.optLong("dateSent",event.getLong("date")));put("thread_id",Telephony.Threads.getOrCreateThreadId(c,event.getString("address")));put("read",0);put("seen",0);put("sub_id",event.optInt("subscriptionId",-1))}
+     var maximum=0L;c.contentResolver.query(Telephony.Sms.CONTENT_URI,arrayOf("_id"),null,null,"_id DESC LIMIT 1")?.use{if(it.moveToFirst())maximum=it.getLong(0)}
+     if(floor==null||maximum<floor)dao.state(State(floorKey,maximum.toString()))
+     PersistenceCheckpoint.reached(c,"provider-prepared",id)
+     val values=ContentValues().apply {put("address",event.getString("address"));put("body",event.getString("body"));put("date",event.getLong("date"));put("date_sent",event.optLong("dateSent",event.getLong("date")));put("thread_id",Telephony.Threads.getOrCreateThreadId(c,event.getString("address")));put("read",0);put("seen",0);put("sub_id",event.optInt("subscriptionId",-1));if(Build.VERSION.SDK_INT>=37)put(Telephony.Sms.TRANSACTION_ID,id)}
      providerId=ContentUris.parseId(c.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI,values)?:throw IllegalStateException("SMS provider rejected receipt"))
      PersistenceCheckpoint.reached(c,"provider-inserted",id)
     }
     receipt=receipt.copy(providerId=providerId);dao.update(receipt)
     PersistenceCheckpoint.reached(c,"provider-linked",id)
    }
+   dao.deleteState("receipt-provider-floor:$id")
    if(!receipt.notified) {
     // Mark before posting: a crash may omit an alert, but cannot repeatedly alert for a recovered OTP.
     dao.update(receipt.copy(notified=true));Notifications.incoming(c,id,event)
    }
    file.delete()
    PersistenceCheckpoint.reached(c,"journal-removed",id)
+   } catch(e:CancellationException){throw e} catch(e:Exception){
+    file.setLastModified(System.currentTimeMillis())
+    android.util.Log.e("TextKeep","Receipt deferred; encrypted receipt retained for retry")
+   }
+   true
+   }
+   if(!processed)return
   }
  }
  fun send(c:Context,address:String,body:String,sub:Int=-1):Long {
@@ -87,7 +108,7 @@ class SmsDeliveryReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i
   val id=if(systemId!=0L)LocalCrypto.hash(("sms:"+systemId+":"+i.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,-1)).toByteArray())else UUID.randomUUID().toString()
   val e=JSONObject().put("kind","sms").put("address",parts.first().displayOriginatingAddress?:"").put("body",parts.joinToString(""){it.displayMessageBody?:""}).put("date",System.currentTimeMillis()).put("dateSent",parts.first().timestampMillis).put("receivedAt",System.currentTimeMillis()).put("subscriptionId",i.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,i.getIntExtra("subscription",-1)))
   LocalCrypto.journal(c,id,e)
-  if(TelephonyCore.unlocked(c)){TelephonyCore.replay(c);SyncScheduler.now(c)}
+  if(TelephonyCore.unlocked(c)){TelephonyCore.replay(c,id);SyncScheduler.now(c)}
  }finally{pending.finish()}}}}
 class UnlockReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val p=goAsync();localScope.launch{try{if(TelephonyCore.unlocked(c)){LocalCrypto.initialize(c);TelephonyCore.replay(c);SyncScheduler.now(c)}}finally{p.finish()}}}}
 class DefaultRoleChangedReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){if(i.action!=Telephony.Sms.Intents.ACTION_DEFAULT_SMS_PACKAGE_CHANGED)return;val p=goAsync();localScope.launch{try{if(TelephonyCore.unlocked(c)){LocalCrypto.initialize(c);TelephonyCore.replay(c);SyncScheduler.now(c)}}finally{p.finish()}}}}
@@ -105,6 +126,7 @@ class RespondViaMessageService:Service(){override fun onBind(i:Intent?)=null;ove
 }}
 object TelephonyManagerAction{const val RESPOND="android.intent.action.RESPOND_VIA_MESSAGE"}
 object MmsCore {
+ internal fun outgoing(address:String)=SendReq().apply{setTo(arrayOf(EncodedStringValue(address)));date=System.currentTimeMillis()/1000}
  fun receive(c:Context,id:String,e:JSONObject):Long{
   val pdu=PduParser(Base64.decode(e.getString("pdu"),Base64.NO_WRAP),true).parse()?:error("Unsupported MMS PDU; encrypted receipt retained")
   if(pdu is RetrieveConf){
@@ -128,7 +150,7 @@ object MmsCore {
  }
  fun send(c:Context,address:String,text:String,attachment:Uri?,sub:Int=-1){
   check(TelephonyCore.isDefault(c)){"Choose TextKeep as the default SMS app first"}
-  val req=SendReq();req.setTo(arrayOf(EncodedStringValue(address)));req.date=System.currentTimeMillis()/1000;req.prepareFromAddress(c,null,sub)
+  val req=outgoing(address)
   val body=PduBody();body.addPart(PduPart().apply{contentType="text/plain".toByteArray();charset=106;contentLocation="text.txt".toByteArray();data=text.toByteArray()})
   if(attachment!=null){val bytes=c.contentResolver.openInputStream(attachment)?.use{input->val out=java.io.ByteArrayOutputStream();val buf=ByteArray(8192);var total=0;while(true){val n=input.read(buf);if(n<0)break;total+=n;require(total<=600_000){"Choose an image smaller than 600 KB"};out.write(buf,0,n)};out.toByteArray()}?:error("Attachment unavailable");require(bytes.size<=600_000){"Choose an image smaller than 600 KB"};body.addPart(PduPart().apply{contentType=(c.contentResolver.getType(attachment)?:"image/jpeg").toByteArray();contentLocation="image.jpg".toByteArray();data=bytes})}
   req.body=body;val saved=PduPersister.getPduPersister(c).persist(req,Telephony.Mms.Outbox.CONTENT_URI,true,true,null,sub)
@@ -149,9 +171,9 @@ object MmsCore {
 
  }
 }
-class MmsDeliveryReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val p=goAsync();localScope.launch{try{val bytes=i.getByteArrayExtra("data")?:return@launch;val systemId=i.getLongExtra("messageId",0L);val id=if(systemId!=0L)LocalCrypto.hash(("mms:"+systemId).toByteArray())else UUID.randomUUID().toString();LocalCrypto.journal(c,id,JSONObject().put("kind","mms").put("pdu",Base64.encodeToString(bytes,Base64.NO_WRAP)).put("subscriptionId",i.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,i.getIntExtra("subscription",-1))).put("receivedAt",System.currentTimeMillis()));if(TelephonyCore.unlocked(c))TelephonyCore.replay(c)}finally{p.finish()}}}}
+class MmsDeliveryReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val p=goAsync();localScope.launch{try{val bytes=i.getByteArrayExtra("data")?:return@launch;val systemId=i.getLongExtra("messageId",0L);val id=if(systemId!=0L)LocalCrypto.hash(("mms:"+systemId).toByteArray())else UUID.randomUUID().toString();LocalCrypto.journal(c,id,JSONObject().put("kind","mms").put("pdu",Base64.encodeToString(bytes,Base64.NO_WRAP)).put("subscriptionId",i.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,i.getIntExtra("subscription",-1))).put("receivedAt",System.currentTimeMillis()));if(TelephonyCore.unlocked(c))TelephonyCore.replay(c,id)}finally{p.finish()}}}}
 class MmsResultReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val code=resultCode;val p=goAsync();localScope.launch{try{
  val name=i.getStringExtra("file")?:return@launch;require(Regex("^[a-fA-F0-9-]+\\.pdu$").matches(name)){"Invalid transport file reference"};val file=File(File(c.filesDir,"mms"),name);val pendingUri=Uri.parse(i.getStringExtra("pendingUri")?:return@launch);require(pendingUri.scheme=="content"&&pendingUri.authority=="mms"&&pendingUri.lastPathSegment?.toLongOrNull()!=null){"Invalid MMS reference"}
- if(code==Activity.RESULT_OK){c.getSharedPreferences("mms_transport",0).edit().remove("failed:$pendingUri").apply();if(i.action=="download") {val bytes=file.readBytes();check(PduParser(bytes,true).parse() is RetrieveConf){"Invalid downloaded MMS; private transport file retained"};val id=LocalCrypto.hash(("download:$pendingUri:").toByteArray()+bytes);LocalCrypto.journal(c,id,JSONObject().put("kind","mms-complete").put("pdu",Base64.encodeToString(bytes,Base64.NO_WRAP)).put("pendingUri",pendingUri.toString()).put("subscriptionId",i.getIntExtra("subscriptionId",-1)).put("receivedAt",System.currentTimeMillis()));file.delete();TelephonyCore.replay(c)}else {val response=i.getByteArrayExtra(SmsManager.EXTRA_MMS_DATA)?.let{PduParser(it,true).parse()} as? SendConf;if(response!=null&&response.responseStatus!=128){c.getSharedPreferences("mms_transport",0).edit().putInt("failed:$pendingUri",response.responseStatus).apply();Notifications.generic(c,"MMS send failed","Open TextKeep to retry")}else c.contentResolver.update(pendingUri,ContentValues().apply{put("msg_box",2);response?.messageId?.let{put("m_id",String(it,Charsets.ISO_8859_1))}},null,null)};file.delete()}
+ if(code==Activity.RESULT_OK){c.getSharedPreferences("mms_transport",0).edit().remove("failed:$pendingUri").apply();if(i.action=="download") {val bytes=file.readBytes();check(PduParser(bytes,true).parse() is RetrieveConf){"Invalid downloaded MMS; private transport file retained"};val id=LocalCrypto.hash(("download:$pendingUri:").toByteArray()+bytes);LocalCrypto.journal(c,id,JSONObject().put("kind","mms-complete").put("pdu",Base64.encodeToString(bytes,Base64.NO_WRAP)).put("pendingUri",pendingUri.toString()).put("subscriptionId",i.getIntExtra("subscriptionId",-1)).put("receivedAt",System.currentTimeMillis()));file.delete();TelephonyCore.replay(c,id)}else {val response=i.getByteArrayExtra(SmsManager.EXTRA_MMS_DATA)?.let{PduParser(it,true).parse()} as? SendConf;if(response!=null&&response.responseStatus!=128){c.getSharedPreferences("mms_transport",0).edit().putInt("failed:$pendingUri",response.responseStatus).apply();Notifications.generic(c,"MMS send failed","Open TextKeep to retry")}else c.contentResolver.update(pendingUri,ContentValues().apply{put("msg_box",2);response?.messageId?.let{put("m_id",String(it,Charsets.ISO_8859_1))}},null,null)};file.delete()}
  else {c.getSharedPreferences("mms_transport",0).edit().putInt("failed:$pendingUri",code).apply();c.contentResolver.update(pendingUri,ContentValues().apply{put("st",135)},null,null);Notifications.generic(c,"MMS needs attention","Open TextKeep to retry the carrier download or send");file.delete()}
  }finally{p.finish()}}}}

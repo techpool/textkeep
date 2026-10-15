@@ -22,7 +22,7 @@ class FaultRecoveryTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val stage get() = context.getSharedPreferences("instrumentation-active-fault", 0)
     private val point get() = InstrumentationRegistry.getArguments().getString("faultPoint")
-    private val receiptPoints = setOf("journal-committed", "receipt-stored", "provider-inserted", "provider-linked", "journal-removed")
+    private val receiptPoints = setOf("journal-committed", "receipt-stored", "provider-prepared", "provider-inserted", "provider-linked", "journal-removed")
     private val sourcePoints = setOf("source-stored", "ack-before", "ack-after")
 
     @Before fun disposableEmulatorOnly() {

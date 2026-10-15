@@ -146,6 +146,7 @@ async function radioTest() {
 test("prepareCommittedJournalForRestart", "prepare");
 command(["shell", "am", "force-stop", target]);
 test("verifyCommittedJournalAfterRestart", "verify");
+test("committedBackupWithoutBaseIsDiscovered");
 test("preparePendingOutboxForRestart", "outbox-prepare");
 command(["shell", "am", "force-stop", target]);
 test("verifyPendingOutboxAfterRestart", "outbox-verify");
@@ -162,7 +163,9 @@ if (process.argv.includes("--sms")) {
   test("prepareProviderInsertForRestart", "provider-prepare");
   command(["shell", "am", "force-stop", target]);
   test("verifyProviderInsertAfterRestart", "provider-verify");
-  for (const point of ["journal-committed", "receipt-stored", "provider-inserted", "provider-linked", "journal-removed", "source-stored", "ack-before", "ack-after"]) fault(point);
+  test("freshReceiptNeverAdoptsAnIdenticalPreexistingProviderRow");
+  test("failedMmsReceiptsCannotBlockFreshSms");
+  for (const point of ["journal-committed", "receipt-stored", "provider-prepared", "provider-inserted", "provider-linked", "journal-removed", "source-stored", "ack-before", "ack-after"]) fault(point);
 }
 console.log(
   "PASS: encrypted journal and bound pending outbox survived process restarts, interrupted AtomicFile replacement retained, revision acknowledgement preserved, and synthetic MMS codec verified. Carrier transport and locked/Direct Boot behavior are separate gates.",

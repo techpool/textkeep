@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
  @Query("UPDATE sources SET error=NULL WHERE error IS NOT NULL") suspend fun retry()
  @Query("SELECT value FROM state WHERE `key`=:key") suspend fun state(key:String):String?
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun state(s:State)
+ @Query("DELETE FROM state WHERE `key`=:key") suspend fun deleteState(key:String)
  @Query("DELETE FROM sources") suspend fun clearSources()
  @Query("DELETE FROM state WHERE `key` IN ('deviceId','deviceToken','accountBinding','registrationAttempt','scanCursor','newCursor','lastUpload','syncError','retryAfter') OR `key` LIKE 'retryAfter:%'") suspend fun resetCloud()
  @Transaction suspend fun uploadStatus(binding:String,lastUpload:String?,error:String) {

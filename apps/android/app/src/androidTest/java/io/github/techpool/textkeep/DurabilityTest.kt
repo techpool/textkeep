@@ -67,6 +67,21 @@ class DurabilityTest {
         assertTrue(stage.edit().remove("id").remove("pid").commit())
     }
 
+    @Test fun committedBackupWithoutBaseIsDiscovered() {
+        val id=UUID.randomUUID().toString()
+        LocalCrypto.journal(context,id,JSONObject().put("kind","sms").put("address","+15550001111")
+            .put("body",body).put("date",System.currentTimeMillis()).put("receivedAt",System.currentTimeMillis()))
+        val base=File(context.createDeviceProtectedStorageContext().filesDir,"receipts/$id.json")
+        try {
+            assertTrue(base.renameTo(File(base.path+".bak")))
+            assertFalse(base.exists())
+            val restored=LocalCrypto.readJournal(context).firstOrNull{it.first.nameWithoutExtension==id}
+                ?: error("A committed AtomicFile backup was not discovered")
+            assertEquals(body,restored.second.getString("body"))
+            assertTrue(base.exists())
+        } finally { AtomicFile(base).delete() }
+    }
+
     @Test fun acknowledgementCannotEraseAnEditMadeDuringUpload() = runBlocking {
         val name = "synthetic-durability-${UUID.randomUUID()}.db"
         var store = Room.databaseBuilder(context, LocalStore::class.java, name).build()
@@ -205,9 +220,13 @@ class DurabilityTest {
         }
         // Model a committed provider insert whose Room acknowledgement was lost.
         // The second, genuinely distinct receipt has identical sender/body/time.
+        var maximum = 0L
+        context.contentResolver.query(Telephony.Sms.CONTENT_URI, arrayOf("_id"), null, null, "_id DESC LIMIT 1")?.use { if (it.moveToFirst()) maximum=it.getLong(0) }
+        dao.state(State("receipt-provider-floor:$first", maximum.toString()))
         val inserted = context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, ContentValues().apply {
             put("address", address); put("body", text); put("date", date); put("date_sent", date)
             put("thread_id", Telephony.Threads.getOrCreateThreadId(context, address)); put("read", 0); put("seen", 0)
+            if (Build.VERSION.SDK_INT >= 37) put(Telephony.Sms.TRANSACTION_ID, first)
         }) ?: error("Synthetic provider insert failed")
         val provider = ContentUris.parseId(inserted)
         assertEquals(0L, dao.receiptById(first)!!.providerId)
@@ -215,6 +234,68 @@ class DurabilityTest {
         val fixture = JSONObject().put("first", first).put("second", second).put("provider", provider)
             .put("address", address).put("text", text).put("date", date).put("pid", android.os.Process.myPid())
         assertTrue(stage.edit().putString("provider", fixture.toString()).commit())
+    }
+
+    @Test fun freshReceiptNeverAdoptsAnIdenticalPreexistingProviderRow(): Unit = runBlocking {
+        check(TelephonyCore.isDefault(context))
+        val id=UUID.randomUUID().toString()
+        val date=System.currentTimeMillis()-600_000
+        val text="Synthetic historical OTP is 515253. Existing-row fixture $id"
+        val args=arrayOf("+15550001111",text,date.toString())
+        val existing=context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, ContentValues().apply {
+            put("address",args[0]);put("body",text);put("date",date);put("date_sent",date)
+            put("thread_id",Telephony.Threads.getOrCreateThreadId(context,args[0]));put("read",0);put("seen",0)
+        }) ?: error("Could not create synthetic existing row")
+        try {
+            LocalCrypto.journal(context,id,JSONObject().put("kind","sms").put("address",args[0]).put("body",text)
+                .put("date",date).put("dateSent",date).put("receivedAt",date))
+            TelephonyCore.replay(context)
+            val receipt=LocalStore.get(context).dao().receiptById(id)!!
+            assertNotEquals(ContentUris.parseId(existing),receipt.providerId)
+            fun count()=context.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI,arrayOf("_id"),"address=? AND body=? AND date=?",args,null)!!.use{it.count}
+            assertEquals(2,count())
+            TelephonyCore.replay(context)
+            assertEquals(2,count())
+        } finally {
+            context.contentResolver.delete(Telephony.Sms.CONTENT_URI,"address=? AND body=? AND date=?",args)
+            LocalStore.get(context).openHelper.writableDatabase.execSQL("DELETE FROM receipts WHERE id=?",arrayOf(id))
+        }
+    }
+
+    @Test fun failedMmsReceiptsCannotBlockFreshSms(): Unit = runBlocking {
+        check(TelephonyCore.isDefault(context))
+        WorkManager.getInstance(context).cancelAllWork().result.get(10, TimeUnit.SECONDS)
+        val invalid=(1..100).map{UUID.randomUUID().toString()}
+        val id=UUID.randomUUID().toString()
+        val directory=File(context.createDeviceProtectedStorageContext().filesDir,"receipts")
+        val manager=context.getSystemService(android.app.NotificationManager::class.java)
+        var date=System.currentTimeMillis()
+        val text="Your OTP is 515253"
+        val args=arrayOf("+15550001234",text,date.toString())
+        try {
+            for (bad in invalid) LocalCrypto.journal(context,bad,JSONObject().put("kind","mms")
+                .put("pdu","AA==").put("receivedAt",date-600_000))
+            date=System.currentTimeMillis();args[2]=date.toString()
+            LocalCrypto.journal(context,id,JSONObject().put("kind","sms").put("address",args[0])
+                .put("body",text).put("date",date).put("dateSent",date).put("receivedAt",date))
+            val start=android.os.SystemClock.elapsedRealtime()
+            TelephonyCore.replay(context,id)
+            assertTrue("The fresh receipt must not wait behind the deferred batch",android.os.SystemClock.elapsedRealtime()-start<10_000)
+            val receipt=LocalStore.get(context).dao().receiptById(id) ?: error("Fresh SMS was blocked")
+            assertTrue(receipt.providerId>0)
+            assertTrue(manager.activeNotifications.any{it.id==id.hashCode()&&it.notification.extras.getCharSequence("android.text")?.contains("515253")==true})
+            assertTrue(invalid.all{File(directory,"$it.json").exists()})
+            TelephonyCore.replay(context)
+            assertTrue("Failed MMS must remain encrypted for retry",invalid.all{File(directory,"$it.json").exists()})
+            context.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI,arrayOf("_id"),"address=? AND body=? AND date=?",args,null)!!.use{assertEquals(1,it.count)}
+        } finally {
+            manager.cancel(id.hashCode())
+            for (receiptId in invalid+id) {
+                AtomicFile(File(directory,"$receiptId.json")).delete()
+                LocalStore.get(context).openHelper.writableDatabase.execSQL("DELETE FROM receipts WHERE id=?",arrayOf(receiptId))
+            }
+            context.contentResolver.delete(Telephony.Sms.CONTENT_URI,"address=? AND body=? AND date=?",args)
+        }
     }
 
     @Test fun verifyProviderInsertAfterRestart() = runBlocking {
@@ -280,6 +361,9 @@ class DurabilityTest {
     }
 
     @Test fun mmsTextPduPreservesUnicodeAndHeaders() {
+        val outgoing=MmsCore.outgoing("+15550002222")
+        assertEquals("insert-address-token",String(outgoing.from.textString))
+        assertEquals("+15550002222",String(outgoing.to.single().textString))
         val pdu = SendReq().apply {
             mmsVersion = PduHeaders.MMS_VERSION_1_2
             date = 1_791_993_000L

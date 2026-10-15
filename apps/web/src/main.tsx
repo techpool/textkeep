@@ -61,6 +61,7 @@ import {
   signOut,
 } from "@firebase/auth";
 import { ApiError, api, type Message, type PublicConfig } from "./api";
+import { MessageBody } from "./MessageBody";
 import "./styles.css";
 const theme = createTheme({
   palette: {
@@ -893,15 +894,14 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                   <Card key={thread.id}>
                     <CardContent>
                       <Typography variant="h6">{thread.address}</Typography>
-                      <Typography
+                      <MessageBody
+                        text={thread.latest.body}
                         sx={{
                           whiteSpace: "pre-wrap",
                           overflowWrap: "anywhere",
                           my: 1,
                         }}
-                      >
-                        {thread.latest.body}
-                      </Typography>
+                      />
                       <Typography variant="caption">
                         {time(thread.date)} ·{" "}
                         {devices.find((d) => d.id === thread.latest.device)
@@ -935,15 +935,14 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                       <Typography variant="caption">
                         {time(m.date)} · {boxes[m.type]}
                       </Typography>
-                      <Typography
+                      <MessageBody
+                        text={m.body}
                         sx={{
                           whiteSpace: "pre-wrap",
                           overflowWrap: "anywhere",
                           my: 2,
                         }}
-                      >
-                        {m.body}
-                      </Typography>
+                      />
                       <Button onClick={() => setDetail(m)}>
                         Message details
                       </Button>
@@ -1281,7 +1280,8 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                         <Typography sx={{ fontWeight: 650 }}>
                           {m.address}
                         </Typography>
-                        <Typography
+                        <MessageBody
+                          text={m.body}
                           color="text.secondary"
                           sx={{
                             overflow: "hidden",
@@ -1289,9 +1289,7 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
                             whiteSpace: "nowrap",
                             my: 0.5,
                           }}
-                        >
-                          {m.body}
-                        </Typography>
+                        />
                         <Typography variant="caption">
                           {time(m.date)} · {boxes[m.type]}
                         </Typography>
@@ -1336,7 +1334,7 @@ function Dashboard({ config }: { config: PublicConfig | null }) {
       >
         <DialogTitle>{detail?.address}</DialogTitle>
         <DialogContent>
-          <Typography className="message-body">{detail?.body}</Typography>
+          <MessageBody className="message-body" text={detail?.body} />
           <Divider sx={{ my: 3 }} />
           <Typography variant="body2" color="text.secondary">
             {detail && time(detail.date)} · {detail && boxes[detail.type]}

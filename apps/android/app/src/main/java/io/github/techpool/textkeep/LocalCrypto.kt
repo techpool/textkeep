@@ -52,10 +52,12 @@ object LocalCrypto {
   val out=target.startWrite();try{out.write(JSONObject().put("version",1).put("ciphertext",b64(ciphertext)).toString().toByteArray());target.finishWrite(out)}catch(e:Exception){target.failWrite(out);throw e}
   PersistenceCheckpoint.reached(c,"journal-committed",id)
  }
- fun readJournal(c:Context):Sequence<Pair<File,JSONObject>> {
+ fun readJournal(c:Context,priorityId:String?=null):Sequence<Pair<File,JSONObject>> {
   check(TelephonyCore.unlocked(c)){"Private receipt keyset is credential protected"};HybridConfig.register()
   val master=AndroidKeystoreKmsClient().getAead("android-keystore://payload-v1")
   val private=KeysetHandle.readWithAssociatedData(BinaryKeysetReader.withBytes(AtomicFile(File(c.noBackupFilesDir,"receipt-private-v1.keyset")).readFully()),master,privateContext).getPrimitive(HybridDecrypt::class.java)
-  return File(c.createDeviceProtectedStorageContext().filesDir,"receipts").listFiles()?.filter{it.extension=="json"}?.sortedBy{it.lastModified()}?.take(100)?.asSequence()?.mapNotNull{f->runCatching{val envelope=JSONObject(AtomicFile(f).readFully().toString(Charsets.UTF_8));f to JSONObject(String(private.decrypt(un64(envelope.getString("ciphertext")),f.nameWithoutExtension.toByteArray())))}.getOrElse{android.util.Log.e("TextKeep","Receipt recovery failed; encrypted envelope retained");null}}?:emptySequence()
+  val directory=File(c.createDeviceProtectedStorageContext().filesDir,"receipts")
+  val files=if(priorityId!=null){require(Regex("^[a-fA-F0-9-]+$").matches(priorityId));listOf(File(directory,"$priorityId.json")).filter{it.exists()||File(it.path+".bak").exists()}}else directory.listFiles()?.mapNotNull{when{it.name.endsWith(".json")->it;it.name.endsWith(".json.bak")->File(directory,it.name.removeSuffix(".bak"));else->null}}?.distinctBy{it.name}?.sortedBy{it.lastModified()}?.take(100)?:emptyList()
+  return files.asSequence().mapNotNull{f->runCatching{val envelope=JSONObject(AtomicFile(f).readFully().toString(Charsets.UTF_8));f to JSONObject(String(private.decrypt(un64(envelope.getString("ciphertext")),f.nameWithoutExtension.toByteArray())))}.getOrElse{f.setLastModified(System.currentTimeMillis());android.util.Log.e("TextKeep","Receipt recovery failed; encrypted envelope retained");null}}
  }
 }
