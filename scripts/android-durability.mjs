@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { join } from "node:path";
 const serial = process.argv[2];
 if (!serial?.startsWith("emulator-"))
@@ -46,6 +46,75 @@ function test(method, stage, className = suite) {
   }
   console.log("PASS", method);
 }
+async function radioTest() {
+  const method = "incomingOriginBoundOtpIsPersistedAndCopiedOffline";
+  await new Promise((resolve, reject) => {
+    // Starting instrumentation force-stops its target. Start it before radio
+    // delivery, or the harness can kill the SMS receiver mid-journal write.
+    const child = spawn(adb, [
+      "-s",
+      serial,
+      "shell",
+      "am",
+      "instrument",
+      "-w",
+      "-r",
+      "-e",
+      "class",
+      "io.github.techpool.textkeep.DefaultSmsTest#" + method,
+      target + ".test/androidx.test.runner.AndroidJUnitRunner",
+    ]);
+    let output = "",
+      injected = false;
+    const timeout = setTimeout(() => {
+      child.kill();
+      reject(Error("Radio test timed out"));
+    }, 90000);
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+      if (!injected && /INSTRUMENTATION_STATUS_CODE: 1/.test(output)) {
+        injected = true;
+        try {
+          const sent = command([
+            "emu",
+            "sms",
+            "send",
+            "40404",
+            "Your OTP is 515253.\\n@example.test #515253",
+          ]);
+          if (!/OK/.test(sent))
+            throw Error("Emulator rejected the synthetic SMS");
+        } catch (error) {
+          clearTimeout(timeout);
+          child.kill();
+          reject(error);
+        }
+      }
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk;
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (
+        code !== 0 ||
+        !injected ||
+        !/OK \(1 test\)/.test(output) ||
+        /FAILURES!!!|INSTRUMENTATION_FAILED/.test(output)
+      ) {
+        console.error(output);
+        reject(Error("Instrumentation failed: " + method));
+      } else {
+        console.log("PASS", method);
+        resolve();
+      }
+    });
+  });
+}
 test("prepareCommittedJournalForRestart", "prepare");
 command(["shell", "am", "force-stop", target]);
 test("verifyCommittedJournalAfterRestart", "verify");
@@ -57,22 +126,7 @@ if (process.argv.includes("--sms")) {
   test("selectThroughNormalSystemRolePrompt", undefined, smsSuite);
   command(["shell", "svc", "wifi", "disable"]);
   command(["shell", "svc", "data", "disable"]);
-  // Let the official emulator construct its radio PDU. Its console accepts
-  // escaped newlines; a literal newline would split the console command.
-  const sent = command([
-    "emu",
-    "sms",
-    "send",
-    "40404",
-    "Your OTP is 515253.\\n@example.test #515253",
-  ]);
-  if (!/OK/.test(sent))
-    throw Error("Emulator radio rejected the synthetic SMS");
-  test(
-    "incomingOriginBoundOtpIsPersistedAndCopiedOffline",
-    undefined,
-    smsSuite,
-  );
+  await radioTest();
 }
 console.log(
   "PASS: committed encrypted receipt recovered in a new process, interrupted AtomicFile replacement retained, revision acknowledgement preserved, and synthetic MMS codec verified. Carrier transport and locked/Direct Boot behavior are separate gates.",
